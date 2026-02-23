@@ -19,7 +19,7 @@ Required command patterns:
 
 ## 2) Test Enforcement
 - After every code change, run tests before finishing.
-- Minimum required check for each change: `make test`.
+- Minimum required check for each code-related change: `make test`.
 - For API/schema/logic changes, run full quality gate:
   1. `make fmt`
   2. `make lint`
