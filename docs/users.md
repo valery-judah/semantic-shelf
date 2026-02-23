@@ -162,18 +162,18 @@ class UserService:
     def __init__(self, repo: UsersRepository) -> None:
         self.repo = repo
 
-    async def get_or_create_shadow_user(self, external_idp_id: str) -> UserRead:
-        user = await self.repo.get_by_external_id(external_idp_id)
+    def get_or_create_shadow_user(self, external_idp_id: str) -> UserRead:
+        user = self.repo.get_by_external_id(external_idp_id)
         if user is None:
-            user = await self.repo.create(
+            user = self.repo.create(
                 id=f"usr_{ulid.new().str}",
                 external_idp_id=external_idp_id,
                 domain_preferences=DomainPreferences().model_dump(),
             )
         return user
 
-    async def update_preferences(self, user_id: str, preferences: dict) -> UserRead:
-        return await self.repo.update_preferences(user_id, preferences)
+    def update_preferences(self, user_id: str, preferences: dict) -> UserRead:
+        return self.repo.update_preferences(user_id, preferences)
 ```
 
 Corrections:
@@ -201,26 +201,26 @@ router = APIRouter(tags=["users"])
 
 
 @router.get("/me", response_model=UserRead)
-async def get_my_profile(
+def get_my_profile(
     external_idp_id: str = Depends(get_external_idp_id),
     svc: UserService = Depends(get_user_service),
 ) -> UserRead:
-    return await svc.get_or_create_shadow_user(external_idp_id)
+    return svc.get_or_create_shadow_user(external_idp_id)
 
 
 @router.patch("/me/preferences", response_model=UserRead)
-async def update_my_preferences(
+def update_my_preferences(
     payload: UserUpdate,
     external_idp_id: str = Depends(get_external_idp_id),
     svc: UserService = Depends(get_user_service),
 ) -> UserRead:
-    user = await svc.get_or_create_shadow_user(external_idp_id)
+    user = svc.get_or_create_shadow_user(external_idp_id)
     if payload.domain_preferences is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="domain_preferences is required",
         )
-    return await svc.update_preferences(
+    return svc.update_preferences(
         user_id=user.id,
         preferences=payload.domain_preferences.model_dump(exclude_unset=True),
     )
@@ -251,21 +251,21 @@ Critique:
 from typing import Any
 from sqlalchemy import cast, select, update
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from books_rec_api.models.user import User
 
 
 class UsersRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: Session) -> None:
         self.session = session
 
-    async def get_by_external_id(self, external_idp_id: str) -> User | None:
+    def get_by_external_id(self, external_idp_id: str) -> User | None:
         stmt = select(User).where(User.external_idp_id == external_idp_id)
-        result = await self.session.execute(stmt)
+        result = self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def create(
+    def create(
         self,
         id: str,
         external_idp_id: str,
@@ -277,17 +277,17 @@ class UsersRepository:
             domain_preferences=domain_preferences,
         )
         self.session.add(new_user)
-        await self.session.flush()
+        self.session.flush()
         return new_user
 
-    async def update_preferences(
+    def update_preferences(
         self,
         user_id: str,
         partial_preferences: dict[str, Any],
     ) -> User | None:
         if not partial_preferences:
             stmt = select(User).where(User.id == user_id)
-            result = await self.session.execute(stmt)
+            result = self.session.execute(stmt)
             return result.scalar_one_or_none()
 
         stmt = (
@@ -300,8 +300,8 @@ class UsersRepository:
             )
             .returning(User)
         )
-        result = await self.session.execute(stmt)
-        await self.session.flush()
+        result = self.session.execute(stmt)
+        self.session.flush()
         return result.scalar_one_or_none()
 ```
 

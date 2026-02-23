@@ -2,7 +2,11 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
+from books_rec_api.database import Base
 from books_rec_api.dependencies.auth import get_external_idp_id
 from books_rec_api.dependencies.users import get_user_service
 from books_rec_api.main import app
@@ -17,14 +21,39 @@ def clear_dependency_overrides() -> Iterator[None]:
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(scope="session")
+def db_engine() -> Engine:
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    return engine
+
+
+@pytest.fixture
+def db_session(db_engine: Engine) -> Iterator[Session]:
+    connection = db_engine.connect()
+    transaction = connection.begin()
+    session_factory = sessionmaker(bind=connection)
+    session = session_factory()
+    try:
+        yield session
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
+
+
 @pytest.fixture
 def test_external_idp_id() -> str:
     return "auth0|test_user_123"
 
 
 @pytest.fixture
-def mock_repo() -> UsersRepository:
-    return UsersRepository()
+def mock_repo(db_session: Session) -> UsersRepository:
+    return UsersRepository(session=db_session)
 
 
 @pytest.fixture
