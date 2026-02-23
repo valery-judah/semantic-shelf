@@ -1,8 +1,11 @@
 .DEFAULT_GOAL := help
+COMPOSE = docker compose
+APP = api
 
 .PHONY: help
 help:
-	@echo "make sync | make install | make fmt | make lint | make type | make test | make openapi | make ci | make run | make docker-build | make docker-run | make docker-up | make docker-down"
+	@echo "make sync | make install | make fmt | make lint | make type | make test | make openapi | make ci"
+	@echo "make run (full stack) | make dev (local app + docker db) | make db | make up | make down | make logs | make ps | make build | make restart | make reset-db"
 
 .PHONY: sync
 sync:
@@ -39,21 +42,40 @@ ci:
 	./scripts/ci_pipeline.sh
 
 .PHONY: run
-run:
+run: up
+
+.PHONY: dev
+dev: db
 	uv run uvicorn books_rec_api.main:app --reload --host 0.0.0.0 --port 8000
 
-.PHONY: docker-build
-docker-build:
-	docker build -t books-rec-api .
+.PHONY: up
+up:
+	$(COMPOSE) up -d --build --remove-orphans
 
-.PHONY: docker-run
-docker-run:
-	docker run -p 8000:8000 books-rec-api
+.PHONY: down
+down:
+	$(COMPOSE) down
 
-.PHONY: docker-up
-docker-up:
-	docker compose up -d --build
+.PHONY: ps
+ps:
+	$(COMPOSE) ps
 
-.PHONY: docker-down
-docker-down:
-	docker compose down
+.PHONY: logs
+logs:
+	$(COMPOSE) logs -f --tail=200
+
+.PHONY: build
+build:
+	$(COMPOSE) build
+
+.PHONY: restart
+restart:
+	$(COMPOSE) restart
+
+.PHONY: db
+db:
+	$(COMPOSE) up -d db
+
+.PHONY: reset-db
+reset-db:
+	$(COMPOSE) down -v

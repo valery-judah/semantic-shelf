@@ -7,10 +7,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - BOOKS_REC_APP_NAME=Recommendation Service MVP
-      - BOOKS_REC_DATABASE_URL=postgresql+psycopg://myuser:secret@db:5432/books_rec
+      - BOOKS_REC_APP_NAME=${BOOKS_REC_APP_NAME:-Recommendation Service MVP}
+      - BOOKS_REC_DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-myuser}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-books_rec}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     # Example for future local development with volume mounts:
     # volumes:
     #   - ./src:/app/src
@@ -19,13 +20,18 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=myuser
-      - POSTGRES_PASSWORD=secret
-      - POSTGRES_DB=books_rec
+      - POSTGRES_USER=${POSTGRES_USER:-myuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret}
+      - POSTGRES_DB=${POSTGRES_DB:-books_rec}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-myuser} -d ${POSTGRES_DB:-books_rec}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
   postgres_data:

@@ -7,7 +7,9 @@ class Settings(BaseSettings):
     app_description: str = "A recommendation service providing tailored book suggestions."
     database_url: str = "postgresql+psycopg://myuser:secret@localhost:5432/books_rec"
 
-    model_config = SettingsConfigDict(env_prefix="BOOKS_REC_")
+    model_config = SettingsConfigDict(
+        env_prefix="BOOKS_REC_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 
 settings = Settings()
