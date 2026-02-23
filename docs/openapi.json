@@ -1,0 +1,376 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Recommendation Service MVP",
+    "description": "A recommendation service providing tailored book suggestions.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/me/recommendations": {
+      "get": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Get Recommendations for Current User",
+        "description": "Generates a list of personalized book recommendations based on the current user's preferences.",
+        "operationId": "read_my_recommendations_me_recommendations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Get Current User Profile",
+        "description": "Fetches the current user profile based on the external identity provider ID. If the user doesn't exist, it is created as a shadow user.",
+        "operationId": "get_my_profile_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/me/preferences": {
+      "patch": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Update Current User Preferences",
+        "description": "Updates the preferences for the current user. Only provided fields are updated.",
+        "operationId": "update_my_preferences_me_preferences_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPreferencesPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Book": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Title of the book",
+            "examples": [
+              "Dune"
+            ]
+          },
+          "author": {
+            "type": "string",
+            "title": "Author",
+            "description": "Author of the book",
+            "examples": [
+              "Frank Herbert"
+            ]
+          },
+          "cover_url": {
+            "type": "string",
+            "title": "Cover Url",
+            "description": "URL to the cover image of the book",
+            "examples": [
+              "https://example.com/dune.jpg"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "author",
+          "cover_url"
+        ],
+        "title": "Book"
+      },
+      "DomainPreferences": {
+        "properties": {
+          "preferred_genres": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Preferred Genres",
+            "description": "List of preferred book genres",
+            "examples": [
+              [
+                "Science Fiction",
+                "Fantasy"
+              ]
+            ]
+          },
+          "ui_theme": {
+            "type": "string",
+            "title": "Ui Theme",
+            "description": "Preferred UI theme for the user",
+            "default": "dark",
+            "examples": [
+              "dark",
+              "light"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "DomainPreferences"
+      },
+      "DomainPreferencesUpdate": {
+        "properties": {
+          "preferred_genres": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Genres",
+            "description": "Optional list of preferred book genres to update",
+            "examples": [
+              [
+                "Science Fiction",
+                "Fantasy"
+              ]
+            ]
+          },
+          "ui_theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Theme",
+            "description": "Optional UI theme to update",
+            "examples": [
+              "dark",
+              "light"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "DomainPreferencesUpdate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Recommendation": {
+        "properties": {
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "Unique identifier of the recommended book",
+            "examples": [
+              "book-123"
+            ]
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Recommendation score, between 0.0 and 1.0",
+            "examples": [
+              0.95
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Explanation for the recommendation",
+            "examples": [
+              "Because you like Science Fiction"
+            ]
+          },
+          "book": {
+            "$ref": "#/components/schemas/Book",
+            "description": "Detailed information about the recommended book"
+          }
+        },
+        "type": "object",
+        "required": [
+          "book_id",
+          "score",
+          "reason",
+          "book"
+        ],
+        "title": "Recommendation"
+      },
+      "RecommendationsResponse": {
+        "properties": {
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/Recommendation"
+            },
+            "type": "array",
+            "title": "Recommendations",
+            "description": "List of recommended books"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recommendations"
+        ],
+        "title": "RecommendationsResponse"
+      },
+      "UserPreferencesPatchRequest": {
+        "properties": {
+          "domain_preferences": {
+            "$ref": "#/components/schemas/DomainPreferencesUpdate",
+            "description": "Preferences to update"
+          }
+        },
+        "type": "object",
+        "required": [
+          "domain_preferences"
+        ],
+        "title": "UserPreferencesPatchRequest"
+      },
+      "UserRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique internal ID of the user",
+            "examples": [
+              "12345678-1234-5678-1234-567812345678"
+            ]
+          },
+          "external_idp_id": {
+            "type": "string",
+            "title": "External Idp Id",
+            "description": "External Identity Provider ID",
+            "examples": [
+              "auth0|123456"
+            ]
+          },
+          "domain_preferences": {
+            "$ref": "#/components/schemas/DomainPreferences",
+            "description": "User's domain preferences"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "external_idp_id",
+          "domain_preferences"
+        ],
+        "title": "UserRead"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

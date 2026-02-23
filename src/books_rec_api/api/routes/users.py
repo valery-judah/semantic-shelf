@@ -10,7 +10,16 @@ from books_rec_api.services.user_service import UserService
 router = APIRouter(tags=["users"])
 
 
-@router.get("/me", response_model=UserRead)
+@router.get(
+    "/me",
+    response_model=UserRead,
+    summary="Get Current User Profile",
+    description=(
+        "Fetches the current user profile based on the external identity provider ID. "
+        "If the user doesn't exist, it is created as a shadow user."
+    ),
+    responses={401: {"description": "Not authenticated"}},
+)
 def get_my_profile(
     external_idp_id: Annotated[str, Depends(get_external_idp_id)],
     svc: Annotated[UserService, Depends(get_user_service)],
@@ -18,7 +27,16 @@ def get_my_profile(
     return svc.get_or_create_shadow_user(external_idp_id=external_idp_id)
 
 
-@router.patch("/me/preferences", response_model=UserRead)
+@router.patch(
+    "/me/preferences",
+    response_model=UserRead,
+    summary="Update Current User Preferences",
+    description="Updates the preferences for the current user. Only provided fields are updated.",
+    responses={
+        401: {"description": "Not authenticated"},
+        404: {"description": "User not found"},
+    },
+)
 def update_my_preferences(
     payload: UserPreferencesPatchRequest,
     external_idp_id: Annotated[str, Depends(get_external_idp_id)],

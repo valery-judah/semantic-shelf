@@ -11,7 +11,16 @@ from books_rec_api.services.user_service import UserService
 router = APIRouter(tags=["recommendations"])
 
 
-@router.get("/me/recommendations", response_model=RecommendationsResponse)
+@router.get(
+    "/me/recommendations",
+    response_model=RecommendationsResponse,
+    summary="Get Recommendations for Current User",
+    description=(
+        "Generates a list of personalized book recommendations "
+        "based on the current user's preferences."
+    ),
+    responses={401: {"description": "Not authenticated"}},
+)
 def read_my_recommendations(
     external_idp_id: Annotated[str, Depends(get_external_idp_id)],
     svc: Annotated[UserService, Depends(get_user_service)],
