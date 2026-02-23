@@ -59,7 +59,7 @@ ci: ## Run the full CI pipeline script locally
 run: up ## Run the full stack using docker compose
 
 .PHONY: dev
-dev: db ## Run the local app with uvicorn and docker db
+dev: migrate ## Run the local app with uvicorn and docker db
 	uv run uvicorn books_rec_api.main:app --reload --host 0.0.0.0 --port 8000
 
 # ==============================================================================
@@ -96,7 +96,7 @@ restart: ## Restart the docker containers
 
 .PHONY: db
 db: ## Start only the database container
-	$(COMPOSE) up -d db
+	$(COMPOSE) up -d --wait db
 
 .PHONY: reset-db
 reset-db: ## Stop containers and wipe the database volume
@@ -105,6 +105,10 @@ reset-db: ## Stop containers and wipe the database volume
 .PHONY: db-shell
 db-shell: ## Open a psql shell to the database
 	$(COMPOSE) exec db psql -U myuser -d books_rec
+
+.PHONY: migrate
+migrate: db ## Run database migrations
+	uv run alembic upgrade head
 
 .PHONY: check-users
 check-users: ## Check the users table in the database

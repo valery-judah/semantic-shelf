@@ -20,6 +20,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy application source code
 COPY src ./src
 COPY README.md ./
+COPY alembic.ini ./
+COPY migrations ./migrations
 
 # Install the application itself
 RUN uv sync --frozen --no-dev
@@ -28,4 +30,4 @@ RUN uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Run the application
-CMD ["uvicorn", "books_rec_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn books_rec_api.main:app --host 0.0.0.0 --port 8000"]
