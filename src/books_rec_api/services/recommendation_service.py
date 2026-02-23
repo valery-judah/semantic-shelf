@@ -1,7 +1,9 @@
 from books_rec_api.schemas.recommendation import Book, Recommendation
+from books_rec_api.schemas.user import UserRead
 
 
-def get_recommendations() -> list[Recommendation]:
+def get_recommendations(*, user: UserRead) -> list[Recommendation]:
+    _ = user
     # MVP stub: replace with real ranking logic + data retrieval.
     return [
         Recommendation(

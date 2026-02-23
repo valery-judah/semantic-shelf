@@ -1,12 +1,10 @@
 from fastapi.testclient import TestClient
 
-from books_rec_api.main import app
 
-
-def test_get_recommendations_returns_expected_shape() -> None:
-    client = TestClient(app)
-
-    response = client.get("/me/recommendations")
+def test_get_recommendations_returns_expected_shape(
+    client_with_overrides: TestClient,
+) -> None:
+    response = client_with_overrides.get("/me/recommendations")
 
     assert response.status_code == 200
     payload = response.json()
