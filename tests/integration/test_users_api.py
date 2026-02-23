@@ -1,7 +1,5 @@
 from fastapi.testclient import TestClient
 
-from books_rec_api.services.user_service import UserService
-
 
 def test_get_me_returns_profile_and_defaults(
     client_with_overrides: TestClient,
@@ -72,13 +70,7 @@ def test_missing_user_header_returns_401(client: TestClient) -> None:
     assert response.json()["detail"] == "Missing or empty X-User-Id header"
 
 
-def test_auth_with_custom_header_works(client: TestClient, mock_user_service: UserService) -> None:
-    # Use the mock db service so we don't hit postgres
-    from books_rec_api.dependencies.users import get_user_service
-    from books_rec_api.main import app
-
-    app.dependency_overrides[get_user_service] = lambda: mock_user_service
-
+def test_auth_with_custom_header_works(client: TestClient) -> None:
     custom_id = "header-test-user-999"
     response = client.get("/me", headers={"X-User-Id": custom_id})
 

@@ -52,6 +52,6 @@ When building a new repository (e.g., `BooksRepository`):
 
 For unit and integration testing, the application avoids hitting a real PostgreSQL database, drastically speeding up the test suite. 
 
-- **In-Memory SQLite**: `tests/conftest.py` overrides the database engine using an in-memory SQLite database (`sqlite:///:memory:`).
+- **In-Memory SQLite**: `tests/conftest.py` sets up an in-memory SQLite database (`sqlite:///:memory:`) and overrides the FastAPI `get_db_session` dependency for all `TestClient` integration tests.
 - **Thread Safety Configuration**: Because FastAPI's TestClient might execute route handlers in thread pools, the SQLite connection must use `check_same_thread=False` and `StaticPool` to ensure all threads share the exact same in-memory DB connection.
-- **Fixture Strategy**: The `db_session` fixture yields an isolated session. Since it's an in-memory database bound to the `Engine` using `StaticPool`, data inserted during testing persists across the connection. Ensure your tests explicitly use or rollback transactions if isolation issues arise.
+- **Fixture Strategy**: The `db_session` fixture yields an isolated session. Since it's an in-memory database bound to the `Engine` using `StaticPool`, the underlying schema persists across the connection. However, the `db_session` fixture wraps each test in a transaction and explicitly rolls it back during teardown. Therefore, data is automatically isolated per test, and developers do not need to explicitly use or rollback transactions.

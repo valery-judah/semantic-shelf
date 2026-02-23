@@ -8,7 +8,6 @@ from sqlalchemy.pool import StaticPool
 
 from books_rec_api.database import Base
 from books_rec_api.dependencies.auth import get_external_idp_id
-from books_rec_api.dependencies.users import get_user_service
 from books_rec_api.main import app
 from books_rec_api.repositories.users_repository import UsersRepository
 from books_rec_api.services.user_service import UserService
@@ -62,23 +61,23 @@ def mock_user_service(mock_repo: UsersRepository) -> UserService:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(db_session: Session) -> Iterator[TestClient]:
+    from books_rec_api.dependencies.users import get_db_session
+
+    def override_get_db_session() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = override_get_db_session
+
     with TestClient(app) as test_client:
         yield test_client
 
 
 @pytest.fixture
-def client_with_overrides(
-    test_external_idp_id: str, mock_user_service: UserService
-) -> Iterator[TestClient]:
+def client_with_overrides(client: TestClient, test_external_idp_id: str) -> Iterator[TestClient]:
     def override_get_external_id() -> str:
         return test_external_idp_id
 
-    def override_get_user_service() -> UserService:
-        return mock_user_service
-
     app.dependency_overrides[get_external_idp_id] = override_get_external_id
-    app.dependency_overrides[get_user_service] = override_get_user_service
 
-    with TestClient(app) as test_client:
-        yield test_client
+    yield client
