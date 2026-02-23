@@ -31,6 +31,29 @@ def test_patch_me_preferences_partial_update(client_with_overrides: TestClient) 
     assert data["domain_preferences"]["ui_theme"] == "dark"
 
 
+def test_patch_me_preferences_full_update(client_with_overrides: TestClient) -> None:
+    client_with_overrides.get("/me")
+
+    response = client_with_overrides.patch(
+        "/me/preferences",
+        json={
+            "domain_preferences": {
+                "preferred_genres": ["Science Fiction", "Fantasy", "Detective"],
+                "ui_theme": "dark",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["domain_preferences"]["preferred_genres"] == [
+        "Science Fiction",
+        "Fantasy",
+        "Detective",
+    ]
+    assert data["domain_preferences"]["ui_theme"] == "dark"
+
+
 def test_patch_me_preferences_invalid_payload_returns_422(
     client_with_overrides: TestClient,
 ) -> None:
