@@ -15,6 +15,27 @@ make migrate
 3. Ensure dataset repo exists (expected path example):
 `../goodbooks-10k-extended`
 
+## First-Boot Auto Import (docker-entrypoint-initdb.d + COPY)
+
+`docker-compose.yml` mounts:
+- `./docker/postgres/init` -> `/docker-entrypoint-initdb.d`
+- `${GOODBOOKS_DATASET_DIR}/books_enriched.csv` -> `/docker-entrypoint-seed/books_enriched.csv`
+
+On first initialization of the `postgres_data` volume, Postgres runs:
+1. [`docker/postgres/init/01_schema.sql`](/Users/val/ml/projects/books-rec/semantic-shelf/docker/postgres/init/01_schema.sql)
+2. [`docker/postgres/init/02_seed_books.sql`](/Users/val/ml/projects/books-rec/semantic-shelf/docker/postgres/init/02_seed_books.sql)
+
+This creates the schema and preloads `books` via SQL `COPY`.
+
+Important notes:
+- This runs only when the DB volume is empty.
+- For an already initialized volume, these scripts are skipped by design.
+- To re-run first-boot seed scripts, run:
+```bash
+make reset-db
+```
+then start again with `make run` or `make dev`.
+
 ## Scripts Overview
 
 1. [`import_goodbooks_books.py`](/Users/val/ml/projects/books-rec/semantic-shelf/scripts/import_goodbooks_books.py)

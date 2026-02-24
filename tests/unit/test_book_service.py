@@ -7,7 +7,12 @@ from books_rec_api.services.book_service import BookService
 def test_get_book_returns_schema():
     repo = MagicMock()
     book = Book(
-        id="1", title="Dune", authors=["Frank Herbert"], genres=["sci-fi"], publication_year=1965
+        id="1",
+        title="Dune",
+        authors=["Frank Herbert"],
+        genres=["sci-fi"],
+        publication_year=1965,
+        description="A science fiction epic on Arrakis.",
     )
     repo.get_by_id.return_value = book
 
@@ -17,6 +22,7 @@ def test_get_book_returns_schema():
     assert result is not None
     assert result.id == "1"
     assert result.title == "Dune"
+    assert result.description == "A science fiction epic on Arrakis."
     repo.get_by_id.assert_called_once_with("1")
 
 
@@ -34,7 +40,12 @@ def test_get_book_returns_none():
 def test_get_books_paginated():
     repo = MagicMock()
     book = Book(
-        id="1", title="Dune", authors=["Frank Herbert"], genres=["sci-fi"], publication_year=1965
+        id="1",
+        title="Dune",
+        authors=["Frank Herbert"],
+        genres=["sci-fi"],
+        publication_year=1965,
+        description="A science fiction epic on Arrakis.",
     )
     repo.list_books.return_value = ([book], 1)
 

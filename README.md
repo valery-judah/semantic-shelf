@@ -47,6 +47,8 @@ Because of the automatic provisioning, you can easily simulate distinct user sce
 ## Dataset Import
 - Import documentation: [`scripts/import.md`](scripts/import.md)
 - Rationale (short): we keep imported Goodbooks data in the existing app schema so the current `books` API stays the canonical read path, while normalized interaction tables (`dataset_users`, `ratings`, `to_read`, `tags`, `book_tags`) enforce referential integrity and support recommendation workflows.
+- First-boot auto-seed: on a fresh DB volume, Postgres runs `docker-entrypoint-initdb.d` scripts and seeds `books` from `${GOODBOOKS_DATASET_DIR}/books_enriched.csv`.
+- If you already initialized the DB volume and want to re-run first-boot seed scripts: `make reset-db` then start again with `make run` or `make dev`.
 
 ### Quality Gates
 - `make test` - run tests

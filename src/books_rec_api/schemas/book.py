@@ -6,6 +6,7 @@ class BookBase(BaseModel):
     authors: list[str] = Field(default_factory=list)
     genres: list[str] = Field(default_factory=list)
     publication_year: int | None = None
+    description: str | None = None
 
 
 class BookRead(BookBase):

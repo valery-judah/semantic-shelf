@@ -12,6 +12,7 @@ def sample_books(db_session):
         authors=["Frank Herbert"],
         genres=["sci-fi"],
         publication_year=1965,
+        description="A science fiction epic on Arrakis.",
     )
     book2 = Book(
         id="book-2",
@@ -56,6 +57,7 @@ def test_get_book_by_id(client_with_overrides: TestClient, sample_books):
     assert data["id"] == "book-1"
     assert data["title"] == "Dune"
     assert data["authors"] == ["Frank Herbert"]
+    assert data["description"] == "A science fiction epic on Arrakis."
 
 
 def test_get_book_by_id_not_found(client_with_overrides: TestClient):
