@@ -44,6 +44,10 @@ Because of the automatic provisioning, you can easily simulate distinct user sce
 - `make logs` - tail the logs of the Docker Compose stack
 - `make reset-db` - clear the database volumes
 
+## Dataset Import
+- Import documentation: [`scripts/import.md`](scripts/import.md)
+- Rationale (short): we keep imported Goodbooks data in the existing app schema so the current `books` API stays the canonical read path, while normalized interaction tables (`dataset_users`, `ratings`, `to_read`, `tags`, `book_tags`) enforce referential integrity and support recommendation workflows.
+
 ### Quality Gates
 - `make test` - run tests
 - `make fmt` - format and auto-fix lint
