@@ -188,8 +188,8 @@ def test_get_similar_books_no_similarities_no_popularity():
 
     assert result is not None
     assert result.similar_book_ids == []
-    assert result.recs_version is None
-    assert result.algo_id is None
+    assert result.recs_version == "unknown"
+    assert result.algo_id == "unknown"
     repo.get_by_id.assert_called_once_with(BookId("A"))
     repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_called_once_with(scope="global")
