@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from books_rec_api.dependencies.books import get_book_service
+from books_rec_api.domain import BookId
 from books_rec_api.schemas.book import BookRead, PaginatedBooks
 from books_rec_api.schemas.recommendation import SimilarBooksResponse
 from books_rec_api.services.book_service import BookService
@@ -24,7 +25,7 @@ def list_books(
 
 @router.get("/{book_id}", response_model=BookRead)
 def get_book_by_id(
-    book_id: str,
+    book_id: BookId,
     svc: Annotated[BookService, Depends(get_book_service)],
 ) -> BookRead:
     """Retrieve a specific book's metadata."""
@@ -39,7 +40,7 @@ def get_book_by_id(
 
 @router.get("/{book_id}/similar", response_model=SimilarBooksResponse)
 def get_similar_books(
-    book_id: str,
+    book_id: BookId,
     svc: Annotated[BookService, Depends(get_book_service)],
     limit: int = Query(20, description="Max number of similar books to return"),
 ) -> SimilarBooksResponse:

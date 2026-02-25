@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from books_rec_api.domain import BookId, PopularityScope
 from books_rec_api.models import Book, BookPopularity, BookSimilarity
 
 
@@ -10,7 +11,7 @@ class BooksRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get_by_id(self, book_id: str) -> Book | None:
+    def get_by_id(self, book_id: BookId) -> Book | None:
         return self.session.get(Book, book_id)
 
     def list_books(
@@ -35,13 +36,13 @@ class BooksRepository:
 
         return items, total
 
-    def get_similarities(self, book_id: str) -> BookSimilarity | None:
+    def get_similarities(self, book_id: BookId) -> BookSimilarity | None:
         """
         Retrieves the pre-computed similarities for a given book.
         """
         return self.session.get(BookSimilarity, book_id)
 
-    def get_popularity(self, scope: str = "global") -> BookPopularity | None:
+    def get_popularity(self, scope: PopularityScope = "global") -> BookPopularity | None:
         """
         Retrieves the pre-computed popularity list.
         """

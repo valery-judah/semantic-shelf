@@ -15,7 +15,7 @@ class BookService:
     def __init__(self, repo: BooksRepository) -> None:
         self.repo = repo
 
-    def get_book(self, book_id: str) -> BookRead | None:
+    def get_book(self, book_id: BookId) -> BookRead | None:
         book = self.repo.get_by_id(book_id)
         if not book:
             return None
@@ -34,7 +34,7 @@ class BookService:
         )
 
     def get_similar_books(
-        self, book_id: str, limit: int, trace_id: str
+        self, book_id: BookId, limit: int, trace_id: str
     ) -> SimilarBooksResponse | None:
         start_time = time.perf_counter()
 
@@ -55,7 +55,7 @@ class BookService:
         if limit > 0:
             for nid in neighbor_ids:
                 if nid not in seen:
-                    seen.add(nid)
+                    seen.add(BookId(nid))
                     filtered_neighbors.append(nid)
                     if len(filtered_neighbors) >= limit:
                         break
@@ -72,7 +72,7 @@ class BookService:
                     recs_version = popularity.recs_version
                 for pid in popularity.book_ids:
                     if pid not in seen:
-                        seen.add(pid)
+                        seen.add(BookId(pid))
                         result_ids.append(pid)
                         fallback_count += 1
                         if len(result_ids) >= limit:

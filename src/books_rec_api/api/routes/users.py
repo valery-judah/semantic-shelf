@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from books_rec_api.dependencies.auth import get_external_idp_id
 from books_rec_api.dependencies.users import get_user_service
+from books_rec_api.domain import ExternalIdpId
 from books_rec_api.schemas.user import UserPreferencesPatchRequest, UserRead
 from books_rec_api.services.user_service import UserService
 
@@ -21,7 +22,7 @@ router = APIRouter(tags=["users"])
     responses={401: {"description": "Not authenticated"}},
 )
 def get_my_profile(
-    external_idp_id: Annotated[str, Depends(get_external_idp_id)],
+    external_idp_id: Annotated[ExternalIdpId, Depends(get_external_idp_id)],
     svc: Annotated[UserService, Depends(get_user_service)],
 ) -> UserRead:
     return svc.get_or_create_shadow_user(external_idp_id=external_idp_id)
@@ -39,7 +40,7 @@ def get_my_profile(
 )
 def update_my_preferences(
     payload: UserPreferencesPatchRequest,
-    external_idp_id: Annotated[str, Depends(get_external_idp_id)],
+    external_idp_id: Annotated[ExternalIdpId, Depends(get_external_idp_id)],
     svc: Annotated[UserService, Depends(get_user_service)],
 ) -> UserRead:
     user = svc.get_or_create_shadow_user(external_idp_id=external_idp_id)

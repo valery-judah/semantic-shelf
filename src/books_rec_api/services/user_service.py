@@ -17,12 +17,12 @@ class UserService:
             domain_preferences=DomainPreferences(**user_model.domain_preferences),
         )
 
-    def get_or_create_shadow_user(self, external_idp_id: str) -> UserRead:
+    def get_or_create_shadow_user(self, external_idp_id: ExternalIdpId) -> UserRead:
         existing = self.repo.get_by_external_id(external_idp_id)
         if existing is not None:
             return self._map_to_schema(existing)
 
-        user_id = f"usr_{uuid4()}"
+        user_id = InternalUserId(f"usr_{uuid4()}")
         new_user = self.repo.create(
             id=user_id,
             external_idp_id=external_idp_id,
@@ -30,7 +30,9 @@ class UserService:
         )
         return self._map_to_schema(new_user)
 
-    def update_preferences(self, user_id: str, patch: DomainPreferencesUpdate) -> UserRead | None:
+    def update_preferences(
+        self, user_id: InternalUserId, patch: DomainPreferencesUpdate
+    ) -> UserRead | None:
         updated_user = self.repo.update_preferences(user_id=user_id, patch=patch)
         if updated_user is None:
             return None

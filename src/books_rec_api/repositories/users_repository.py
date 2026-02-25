@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from books_rec_api.domain import ExternalIdpId, InternalUserId
 from books_rec_api.models import User as UserModel
 from books_rec_api.schemas.user import DomainPreferences, DomainPreferencesUpdate
 
@@ -9,15 +10,18 @@ class UsersRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get_by_external_id(self, external_idp_id: str) -> UserModel | None:
+    def get_by_external_id(self, external_idp_id: ExternalIdpId) -> UserModel | None:
         stmt = select(UserModel).where(UserModel.external_idp_id == external_idp_id)
         return self.session.scalars(stmt).first()
 
-    def get_by_id(self, user_id: str) -> UserModel | None:
+    def get_by_id(self, user_id: InternalUserId) -> UserModel | None:
         return self.session.get(UserModel, user_id)
 
     def create(
-        self, id: str, external_idp_id: str, domain_preferences: DomainPreferences
+        self,
+        id: InternalUserId,
+        external_idp_id: ExternalIdpId,
+        domain_preferences: DomainPreferences,
     ) -> UserModel:
         user_model = UserModel(
             id=id,
@@ -30,7 +34,9 @@ class UsersRepository:
 
         return user_model
 
-    def update_preferences(self, user_id: str, patch: DomainPreferencesUpdate) -> UserModel | None:
+    def update_preferences(
+        self, user_id: InternalUserId, patch: DomainPreferencesUpdate
+    ) -> UserModel | None:
         user_model = self.session.get(UserModel, user_id)
         if user_model is None:
             return None
