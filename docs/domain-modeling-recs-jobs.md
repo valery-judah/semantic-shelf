@@ -1,69 +1,42 @@
 # Domain Modeling: Recommendation Jobs (`job_compute_neighbors.py` + `job_compute_popularity.py`)
 
 ## Purpose
-Create a single refactoring plan for recommendation batch jobs so type names, data-shape contracts, and runtime conventions stay consistent across scripts.
+Define job-specific domain modeling guidance for recommendation batch jobs while reusing system-wide conventions from the core domain model plan.
 
 Covered jobs:
 - `scripts/job_compute_neighbors.py`
 - `scripts/job_compute_popularity.py`
 
-## Common Plan (Shared Across Jobs)
+## Dependency
+This document depends on:
+- [docs/domain-modeling-core.md](/Users/val/ml/projects/books-rec/semantic-shelf/docs/domain-modeling-core.md)
 
-### 1. Shared Value Types
-Define semantic aliases with `typing.NewType` (or `type` aliases where clearer) in a shared module.
+Shared value types and identity aliases are defined centrally in `src/books_rec_api/domain.py` and must be imported by job scripts rather than redefined locally.
 
-Suggested baseline:
-```python
-from datetime import datetime
-from typing import NewType, Literal
+## Job-Shared Guidance
 
-BookId = NewType("BookId", str)
-Score = NewType("Score", float)
-RecsVersion = NewType("RecsVersion", str)
-AlgoId = NewType("AlgoId", str)
-PopularityScope = Literal["global"]
-Timestamp = datetime
-```
+### 1. Use Core Domain Types (Do Not Redefine)
+Import shared aliases from `src/books_rec_api/domain.py` (for example, `BookId`, `Score`, `RecsVersion`, `AlgoId`, `PopularityScope`).
 
-Notes:
-- `NewType` is for static typing and readability, not runtime enforcement.
-- Keep `PopularityScope` explicit so `"global"` is not repeated as an untyped string literal.
+### 2. Runtime Conventions in Job Scripts
+- Use UTC timestamps consistently and keep `recs_version` format stable (`%Y-%m-%dT%H:%M:%SZ`).
+- Use explicit constants for stable identifiers (algorithm id and popularity scope).
+- Normalize metadata collections (`authors`, `genres`) by trimming and dropping empty values before scoring.
 
-### 2. Shared Runtime Conventions
-- Use one UTC timestamp source per run where possible.
-- Keep `recs_version` format consistent (`%Y-%m-%dT%H:%M:%SZ`).
-- Use explicit constants for stable identifiers:
-  - neighbors algorithm id (for example, `meta_v0`)
-  - popularity scope (`global`)
-
-### 3. Shared Record and Payload Discipline
-Use structured records at in-memory boundaries and typed dict payloads at DB write boundaries.
-
-Guideline:
+### 3. Record and Payload Discipline
 - In-memory compute structures: `@dataclass(slots=True, frozen=True)` or `NamedTuple`.
-- DB insert/update dicts: `TypedDict`.
+- DB write payload dicts: `TypedDict`.
 
-### 4. Shared Data Hygiene
-Normalize metadata before scoring or persisting:
-- trim whitespace
-- drop empty values
-- deduplicate via sets/frozensets
-
-This remains runtime logic; typing annotations do not replace it.
-
-### 5. Shared Quality Gate
-For refactors in either job, run:
-1. `make fmt`
-2. `make lint`
-3. `make type`
-4. `make test`
-
-Also enforce `make type` in CI so static guarantees are continuously checked.
+## Boundaries
+- `NewType`/`TypedDict` provide static analysis and readability benefits, not runtime validation by themselves.
+- Runtime normalization and validation remain explicit job logic.
+- SQLAlchemy ORM models remain primitive-typed; conversion boundaries live above ORM definitions.
 
 ## Appendix A: Neighbors Job (`job_compute_neighbors.py`)
 
 ### A1. Domain Records
 ```python
+from datetime import datetime
 from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 
@@ -81,7 +54,7 @@ class SimilarityRecord(TypedDict):
     neighbor_ids: list[BookId]
     recs_version: RecsVersion
     algo_id: AlgoId
-    updated_at: Timestamp
+    updated_at: datetime
 ```
 
 ### A2. Performance Constraint
@@ -99,13 +72,14 @@ Even with ORM object writes, model the input selection and output contract expli
 
 Optional typed payload shape:
 ```python
+from datetime import datetime
 from typing import TypedDict
 
 class PopularityRecord(TypedDict):
     scope: PopularityScope
     book_ids: list[BookId]
     recs_version: RecsVersion
-    updated_at: Timestamp
+    updated_at: datetime
 ```
 
 ### B2. Selection Contract
@@ -122,8 +96,22 @@ Validate this as intentional and test:
 - version/timestamp update per run
 
 ## Implementation Sequence
-1. Add shared domain typing module for recommendation jobs.
-2. Migrate neighbors job records and payload typing.
-3. Migrate popularity job constants and payload typing.
-4. Add/update tests to cover contracts in both jobs.
-5. Run the quality gate (`fmt`, `lint`, `type`, `test`).
+1. Complete core rollout in [docs/domain-modeling-core.md](/Users/val/ml/projects/books-rec/semantic-shelf/docs/domain-modeling-core.md) (shared domain module and boundary typing strategy).
+2. Migrate `job_compute_neighbors.py` to import core aliases and apply neighbors-specific records.
+3. Migrate `job_compute_popularity.py` to import core aliases and apply popularity-specific contracts.
+4. Add/update tests to cover job contracts and edge cases.
+5. Run quality gate: `make fmt`, `make lint`, `make type`, `make test`.
+6. Ensure CI enforces `make type` for ongoing static-check coverage.
+
+## Verification Matrix
+### `job_compute_neighbors.py`
+- anchor book is not returned in neighbors
+- duplicates are removed while preserving ordering intent
+- top-`k` truncation is respected
+- ordering is deterministic for equal-score conditions per defined tie policy
+
+### `job_compute_popularity.py`
+- ordering by `ratings_count` descending
+- null `ratings_count` excluded
+- capped to top 1000
+- `global` scope row replacement semantics hold on reruns
