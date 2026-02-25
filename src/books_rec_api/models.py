@@ -120,3 +120,28 @@ class ToRead(Base):
     book_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
     )
+
+
+class BookSimilarity(Base):
+    __tablename__ = "book_similarities"
+
+    book_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
+    )
+    neighbor_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    recs_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    algo_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class BookPopularity(Base):
+    __tablename__ = "book_popularity"
+
+    scope: Mapped[str] = mapped_column(Text, primary_key=True)
+    book_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    recs_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )

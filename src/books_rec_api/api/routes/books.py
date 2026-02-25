@@ -1,9 +1,11 @@
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from books_rec_api.dependencies.books import get_book_service
 from books_rec_api.schemas.book import BookRead, PaginatedBooks
+from books_rec_api.schemas.recommendation import SimilarBooksResponse
 from books_rec_api.services.book_service import BookService
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -33,3 +35,28 @@ def get_book_by_id(
             detail=f"Book with id {book_id} not found",
         )
     return book
+
+
+@router.get("/{book_id}/similar", response_model=SimilarBooksResponse)
+def get_similar_books(
+    book_id: str,
+    svc: Annotated[BookService, Depends(get_book_service)],
+    limit: int = Query(20, description="Max number of similar books to return"),
+) -> SimilarBooksResponse:
+    """Retrieve an ordered list of similar book IDs for a given book."""
+    if limit < 0 or limit > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query param 'limit' must be between 0 and 100",
+        )
+
+    trace_id = str(uuid.uuid4())
+    result = svc.get_similar_books(book_id, limit, trace_id)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Book with id {book_id} not found",
+        )
+
+    return result

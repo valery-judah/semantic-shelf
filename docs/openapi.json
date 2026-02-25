@@ -6,6 +6,183 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/books": {
+      "get": {
+        "tags": [
+          "books"
+        ],
+        "summary": "List Books",
+        "description": "Retrieve a paginated list of books from the catalog.",
+        "operationId": "list_books_books_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Items per page",
+              "default": 20,
+              "title": "Size"
+            },
+            "description": "Items per page"
+          },
+          {
+            "name": "genre",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by genre",
+              "title": "Genre"
+            },
+            "description": "Filter by genre"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedBooks"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/{book_id}": {
+      "get": {
+        "tags": [
+          "books"
+        ],
+        "summary": "Get Book By Id",
+        "description": "Retrieve a specific book's metadata.",
+        "operationId": "get_book_by_id_books__book_id__get",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Book Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/{book_id}/similar": {
+      "get": {
+        "tags": [
+          "books"
+        ],
+        "summary": "Get Similar Books",
+        "description": "Retrieve an ordered list of similar book IDs for a given book.",
+        "operationId": "get_similar_books_books__book_id__similar_get",
+        "parameters": [
+          {
+            "name": "book_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Book Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Max number of similar books to return",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Max number of similar books to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimilarBooksResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/recommendations": {
       "get": {
         "tags": [
@@ -157,6 +334,60 @@
         ],
         "title": "Book"
       },
+      "BookRead": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Authors"
+          },
+          "genres": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genres"
+          },
+          "publication_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Year"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "id"
+        ],
+        "title": "BookRead"
+      },
       "DomainPreferences": {
         "properties": {
           "preferred_genres": {
@@ -243,6 +474,37 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "PaginatedBooks": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BookRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "size"
+        ],
+        "title": "PaginatedBooks"
+      },
       "Recommendation": {
         "properties": {
           "book_id": {
@@ -301,6 +563,77 @@
           "recommendations"
         ],
         "title": "RecommendationsResponse"
+      },
+      "SimilarBooksResponse": {
+        "properties": {
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "Unique identifier of the anchor book",
+            "examples": [
+              "book-123"
+            ]
+          },
+          "similar_book_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Similar Book Ids",
+            "description": "List of similar book identifiers",
+            "examples": [
+              [
+                "book-456",
+                "book-789"
+              ]
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id",
+            "description": "Correlation identifier for the request",
+            "examples": [
+              "01J...XYZ"
+            ]
+          },
+          "algo_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algo Id",
+            "description": "Identifier for the recommendation algorithm",
+            "examples": [
+              "meta_v0"
+            ]
+          },
+          "recs_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recs Version",
+            "description": "Version of the published recommendation artifacts",
+            "examples": [
+              "2026-02-25T03:00Z"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "book_id",
+          "similar_book_ids",
+          "trace_id"
+        ],
+        "title": "SimilarBooksResponse"
       },
       "UserPreferencesPatchRequest": {
         "properties": {

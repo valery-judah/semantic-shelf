@@ -25,3 +25,23 @@ class Recommendation(BaseModel):
 
 class RecommendationsResponse(BaseModel):
     recommendations: list[Recommendation] = Field(description="List of recommended books")
+
+
+class SimilarBooksResponse(BaseModel):
+    book_id: str = Field(description="Unique identifier of the anchor book", examples=["book-123"])
+    similar_book_ids: list[str] = Field(
+        description="List of similar book identifiers", examples=[["book-456", "book-789"]]
+    )
+    trace_id: str = Field(
+        description="Correlation identifier for the request", examples=["01J...XYZ"]
+    )
+    algo_id: str | None = Field(
+        default=None,
+        description="Identifier for the recommendation algorithm",
+        examples=["meta_v0"],
+    )
+    recs_version: str | None = Field(
+        default=None,
+        description="Version of the published recommendation artifacts",
+        examples=["2026-02-25T03:00Z"],
+    )
