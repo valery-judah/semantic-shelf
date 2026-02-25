@@ -6,6 +6,8 @@ from books_rec_api.schemas.telemetry import (
     EventBatchRequest,
     SimilarClickEvent,
     SimilarImpressionEvent,
+    SimilarRatingEvent,
+    SimilarShelfAddEvent,
 )
 from books_rec_api.services.telemetry_service import TelemetryService
 
@@ -110,12 +112,23 @@ def test_event_batch_request_discriminator():
                 "clicked_book_id": "B",
                 "position": 0,
             },
+            {
+                "event_name": "similar_rating",
+                "ts": "2026-02-25T19:02:00Z",
+                "request_id": "req-1",
+                "anchor_book_id": "A",
+                "algo_id": "algo-1",
+                "recs_version": "v1",
+                "book_id": "B",
+                "rating_value": 5,
+            },
         ]
     }
     batch = EventBatchRequest.model_validate(payload)
-    assert len(batch.events) == 2
+    assert len(batch.events) == 3
     assert isinstance(batch.events[0], SimilarImpressionEvent)
     assert isinstance(batch.events[1], SimilarClickEvent)
+    assert isinstance(batch.events[2], SimilarRatingEvent)
 
 
 def test_telemetry_service_process_events(caplog):
@@ -135,3 +148,64 @@ def test_telemetry_service_process_events(caplog):
     assert "TELEMETRY: {" in caplog.text
     assert '"event_name": "similar_click"' in caplog.text
     assert '"clicked_book_id": "B"' in caplog.text
+
+
+def test_valid_similar_shelf_add_event_with_experiment_fields():
+    event = SimilarShelfAddEvent(
+        event_name="similar_shelf_add",
+        ts=datetime.now(UTC),
+        request_id="trace-123",
+        anchor_book_id="A",
+        algo_id="meta_v0",
+        recs_version="v1",
+        book_id="B",
+        experiment_id="exp_1",
+        variant_id="var_2",
+        bucket_key_hash="hash_abc",
+    )
+    assert event.event_name == "similar_shelf_add"
+    assert event.book_id == "B"
+    assert event.experiment_id == "exp_1"
+    assert event.variant_id == "var_2"
+    assert event.bucket_key_hash == "hash_abc"
+
+
+def test_valid_similar_rating_event():
+    event = SimilarRatingEvent(
+        event_name="similar_rating",
+        ts=datetime.now(UTC),
+        request_id="trace-123",
+        anchor_book_id="A",
+        algo_id="meta_v0",
+        recs_version="v1",
+        book_id="B",
+        rating_value=4,
+    )
+    assert event.event_name == "similar_rating"
+    assert event.rating_value == 4
+
+
+def test_invalid_similar_rating_event_out_of_bounds():
+    with pytest.raises(ValueError):
+        SimilarRatingEvent(
+            event_name="similar_rating",
+            ts=datetime.now(UTC),
+            request_id="trace-123",
+            anchor_book_id="A",
+            algo_id="meta_v0",
+            recs_version="v1",
+            book_id="B",
+            rating_value=6,
+        )
+
+    with pytest.raises(ValueError):
+        SimilarRatingEvent(
+            event_name="similar_rating",
+            ts=datetime.now(UTC),
+            request_id="trace-123",
+            anchor_book_id="A",
+            algo_id="meta_v0",
+            recs_version="v1",
+            book_id="B",
+            rating_value=0,
+        )

@@ -117,3 +117,130 @@ def test_evaluate_ranking_ignores_clicks_not_in_impression():
         assert "Overall CTR:         1.0000" in output
         assert "Pos  0: 0.0000" in output
         assert "Pos  1: 1.0000" in output
+
+
+def test_evaluate_ranking_outcomes_attribution():
+    logs = [
+        {
+            "event_name": "similar_impression",
+            "ts": "2026-02-25T10:00:00Z",
+            "request_id": "r1",
+            "shown_book_ids": ["b1", "b2"],
+            "positions": [0, 1],
+        },
+        # Shelf add for b1 (should be attributed)
+        {
+            "event_name": "similar_shelf_add",
+            "ts": "2026-02-25T11:00:00Z",
+            "request_id": "r1",
+            "book_id": "b1",
+        },
+        # Reading start for b1 (should be attributed)
+        {
+            "event_name": "similar_reading_start",
+            "ts": "2026-02-25T12:00:00Z",
+            "request_id": "r1",
+            "book_id": "b1",
+        },
+        # Duplicate reading start (should be deduplicated to 1 start per impression)
+        {
+            "event_name": "similar_reading_start",
+            "ts": "2026-02-25T13:00:00Z",
+            "request_id": "r1",
+            "book_id": "b1",
+        },
+        # Reading finish for b2 (should be attributed)
+        {
+            "event_name": "similar_reading_finish",
+            "ts": "2026-02-26T10:00:00Z",
+            "request_id": "r1",
+            "book_id": "b2",
+        },
+        # Rating for b1 (first rating)
+        {
+            "event_name": "similar_rating",
+            "ts": "2026-02-26T11:00:00Z",
+            "request_id": "r1",
+            "book_id": "b1",
+            "rating_value": 4,
+        },
+        # Rating for b1 (latest rating, should overwrite previous)
+        {
+            "event_name": "similar_rating",
+            "ts": "2026-02-26T12:00:00Z",
+            "request_id": "r1",
+            "book_id": "b1",
+            "rating_value": 5,
+        },
+        # Rating for book not in impression (should be ignored)
+        {
+            "event_name": "similar_rating",
+            "ts": "2026-02-26T12:00:00Z",
+            "request_id": "r1",
+            "book_id": "b9",
+            "rating_value": 1,
+        },
+        # Another impression
+        {
+            "event_name": "similar_impression",
+            "ts": "2026-02-27T10:00:00Z",
+            "request_id": "r2",
+            "shown_book_ids": ["b3", "b4"],
+            "positions": [0, 1],
+        },
+    ]
+
+    with tempfile.NamedTemporaryFile("w", delete=False) as f:
+        for log in logs:
+            f.write(json.dumps(log) + "\n")
+        f.flush()
+
+        result = subprocess.run(
+            [sys.executable, "-m", "scripts.evaluate_ranking", "--input", f.name],
+            capture_output=True,
+            text=True,
+        )
+
+        output = result.stdout
+        # 2 impressions total
+        # r1 has: 1 shelf add, 1 start, 1 finish, 1 rating of 5
+        # r2 has: nothing
+        assert "Total Impressions:   2" in output
+        assert "Add-to-Shelf Rate:   0.5000 (1 attributed)" in output
+        assert "Start Rate:          0.5000 (1 attributed)" in output
+        assert "Finish Rate:         0.5000 (1 attributed)" in output
+        assert "Avg Rating:          5.0000 (1 attributed)" in output
+
+
+def test_evaluate_ranking_outcomes_window():
+    logs = [
+        {
+            "event_name": "similar_impression",
+            "ts": "2026-02-25T10:00:00Z",
+            "request_id": "r1",
+            "shown_book_ids": ["b1"],
+            "positions": [0],
+        },
+        # Shelf add just outside of default 168h window (7 days = 168h)
+        # 2026-02-25 + 7 days = 2026-03-04T10:00:00Z
+        {
+            "event_name": "similar_shelf_add",
+            "ts": "2026-03-04T11:00:00Z",  # 169h later
+            "request_id": "r1",
+            "book_id": "b1",
+        },
+    ]
+
+    with tempfile.NamedTemporaryFile("w", delete=False) as f:
+        for log in logs:
+            f.write(json.dumps(log) + "\n")
+        f.flush()
+
+        result = subprocess.run(
+            [sys.executable, "-m", "scripts.evaluate_ranking", "--input", f.name],
+            capture_output=True,
+            text=True,
+        )
+
+        output = result.stdout
+        assert "Add-to-Shelf Rate:   0.0000 (0 attributed)" in output
