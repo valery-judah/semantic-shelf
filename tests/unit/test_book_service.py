@@ -1,15 +1,17 @@
-from unittest.mock import create_autospec
+from typing import cast
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pydantic import ValidationError
 
+from books_rec_api.domain import BookId
 from books_rec_api.models import Book, BookPopularity, BookSimilarity
 from books_rec_api.repositories.books_repository import BooksRepository
 from books_rec_api.services.book_service import BookService
 
 
-def make_repo() -> BooksRepository:
-    return create_autospec(BooksRepository, instance=True, spec_set=True)
+def make_repo() -> MagicMock:
+    return cast(MagicMock, create_autospec(BooksRepository, instance=True, spec_set=True))
 
 
 def make_book(book_id: str = "1", title: str = "Dune") -> Book:
@@ -50,7 +52,7 @@ def test_get_book_returns_schema():
     repo.get_by_id.return_value = book
 
     svc = BookService(repo)
-    result = svc.get_book("1")
+    result = svc.get_book(BookId("1"))
 
     assert result is not None
     assert result.id == "1"
@@ -64,7 +66,7 @@ def test_get_book_returns_none():
     repo.get_by_id.return_value = None
 
     svc = BookService(repo)
-    result = svc.get_book("999")
+    result = svc.get_book(BookId("999"))
 
     assert result is None
     repo.get_by_id.assert_called_once_with("999")
@@ -98,7 +100,7 @@ def test_get_similar_books_full_neighbors():
     )
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=2, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=2, trace_id="trace-123")
 
     assert result is not None
     assert result.book_id == "A"
@@ -106,8 +108,8 @@ def test_get_similar_books_full_neighbors():
     assert result.similar_book_ids == ["B", "C"]
     assert result.algo_id == "meta_v0"
     assert result.recs_version == "v1"
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_not_called()
 
 
@@ -126,13 +128,13 @@ def test_get_similar_books_fallback_needed():
     )
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=3, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=3, trace_id="trace-123")
 
     assert result is not None
     assert result.similar_book_ids == ["B", "P1", "P2"]
     assert result.recs_version == "v1"
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_called_once_with(scope="global")
 
 
@@ -146,11 +148,13 @@ def test_get_similar_books_deduplication():
     repo.get_popularity.return_value = make_popularity(book_ids=["C", "D", "A"])
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=10, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=10, trace_id="trace-123")
+
+    assert result is not None
 
     assert result.similar_book_ids == ["B", "C", "D"]
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_called_once_with(scope="global")
 
 
@@ -159,10 +163,10 @@ def test_get_similar_books_not_found():
     repo.get_by_id.return_value = None
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="missing", limit=10, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("missing"), limit=10, trace_id="trace-123")
 
     assert result is None
-    repo.get_by_id.assert_called_once_with("missing")
+    repo.get_by_id.assert_called_once_with(BookId("missing"))
     repo.get_similarities.assert_not_called()
     repo.get_popularity.assert_not_called()
 
@@ -174,14 +178,14 @@ def test_get_similar_books_no_similarities_no_popularity():
     repo.get_popularity.return_value = None
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=10, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=10, trace_id="trace-123")
 
     assert result is not None
     assert result.similar_book_ids == []
     assert result.recs_version is None
     assert result.algo_id is None
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_called_once_with(scope="global")
 
 
@@ -200,13 +204,13 @@ def test_get_similar_books_recs_version_fallback():
     )
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=3, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=3, trace_id="trace-123")
 
     assert result is not None
     assert result.similar_book_ids == ["B", "C", "D"]
     assert result.recs_version == "pop_v2"
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_called_once_with(scope="global")
 
 
@@ -217,12 +221,12 @@ def test_get_similar_books_exact_limit():
     repo.get_popularity.return_value = make_popularity(book_ids=["D"])
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=2, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=2, trace_id="trace-123")
 
     assert result is not None
     assert result.similar_book_ids == ["B", "C"]
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_not_called()
 
 
@@ -233,12 +237,12 @@ def test_get_similar_books_catalog_exhaustion():
     repo.get_popularity.return_value = make_popularity(book_ids=["C", "D"])
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=100, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=100, trace_id="trace-123")
 
     assert result is not None
     assert result.similar_book_ids == ["B", "C", "D"]
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_called_once_with(scope="global")
 
 
@@ -249,12 +253,12 @@ def test_get_similar_books_total_deduplication():
     repo.get_popularity.return_value = make_popularity(book_ids=["C", "B", "A"])
 
     svc = BookService(repo)
-    result = svc.get_similar_books(book_id="A", limit=5, trace_id="trace-123")
+    result = svc.get_similar_books(book_id=BookId("A"), limit=5, trace_id="trace-123")
 
     assert result is not None
     assert result.similar_book_ids == ["B", "C"]
-    repo.get_by_id.assert_called_once_with("A")
-    repo.get_similarities.assert_called_once_with("A")
+    repo.get_by_id.assert_called_once_with(BookId("A"))
+    repo.get_similarities.assert_called_once_with(BookId("A"))
     repo.get_popularity.assert_called_once_with(scope="global")
 
 
@@ -263,4 +267,4 @@ def test_service_validation_rejects_invalid_book_id():
     svc = BookService(repo)
 
     with pytest.raises(ValidationError):
-        svc.get_book(book_id="")  # Empty string violates min_length=1
+        svc.get_book(book_id=BookId(""))  # Empty string violates min_length=1
