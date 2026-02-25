@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from books_rec_api.domain import ExternalIdpId, InternalUserId
+
 
 class DomainPreferences(BaseModel):
     preferred_genres: list[str] = Field(
@@ -24,11 +26,11 @@ class DomainPreferencesUpdate(BaseModel):
 
 
 class UserRead(BaseModel):
-    id: str = Field(
+    id: InternalUserId = Field(
         description="Unique internal ID of the user",
         examples=["12345678-1234-5678-1234-567812345678"],
     )
-    external_idp_id: str = Field(
+    external_idp_id: ExternalIdpId = Field(
         description="External Identity Provider ID", examples=["auth0|123456"]
     )
     domain_preferences: DomainPreferences = Field(description="User's domain preferences")

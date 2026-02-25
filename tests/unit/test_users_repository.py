@@ -41,8 +41,8 @@ def test_update_preferences_top_level_merge_semantics(db_session: Session) -> No
     )
 
     assert updated is not None
-    assert updated.domain_preferences.preferred_genres == ["fantasy"]
-    assert updated.domain_preferences.ui_theme == "dark"
+    assert updated.domain_preferences.get("preferred_genres") == ["fantasy"]
+    assert updated.domain_preferences.get("ui_theme") == "dark"
 
 
 def test_update_preferences_returns_unchanged_on_empty_patch(db_session: Session) -> None:

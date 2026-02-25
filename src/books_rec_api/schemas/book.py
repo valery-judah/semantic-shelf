@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from books_rec_api.domain import BookId
+
 
 class BookBase(BaseModel):
     title: str
@@ -10,7 +12,7 @@ class BookBase(BaseModel):
 
 
 class BookRead(BookBase):
-    id: str
+    id: BookId
 
     model_config = ConfigDict(from_attributes=True)
 

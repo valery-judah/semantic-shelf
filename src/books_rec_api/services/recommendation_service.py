@@ -1,3 +1,4 @@
+from books_rec_api.domain import BookId, Score
 from books_rec_api.schemas.recommendation import Book, Recommendation
 from books_rec_api.schemas.user import UserRead
 
@@ -7,8 +8,8 @@ def get_recommendations(*, user: UserRead) -> list[Recommendation]:
     # MVP stub: replace with real ranking logic + data retrieval.
     return [
         Recommendation(
-            book_id="123",
-            score=0.95,
+            book_id=BookId("123"),
+            score=Score(0.95),
             reason="popular_in_sci_fi",
             book=Book(
                 title="Dune",

@@ -3,6 +3,7 @@ import logging
 import time
 from datetime import datetime
 
+from books_rec_api.domain import AlgoId, BookId, RecsVersion
 from books_rec_api.repositories.books_repository import BooksRepository
 from books_rec_api.schemas.book import BookRead, PaginatedBooks
 from books_rec_api.schemas.recommendation import SimilarBooksResponse
@@ -101,9 +102,9 @@ class BookService:
         logger.info("TELEMETRY: %s", json.dumps(log_event))
 
         return SimilarBooksResponse(
-            book_id=book_id,
-            similar_book_ids=result_ids,
+            book_id=BookId(book_id),
+            similar_book_ids=[BookId(nid) for nid in result_ids],
             trace_id=trace_id,
-            algo_id=algo_id,
-            recs_version=recs_version,
+            algo_id=AlgoId(algo_id) if algo_id else None,
+            recs_version=RecsVersion(recs_version) if recs_version else None,
         )

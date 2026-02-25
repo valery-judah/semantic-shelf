@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from books_rec_api.domain import AlgoId, BookId, RecsVersion, Score
+
 
 class Book(BaseModel):
     title: str = Field(description="Title of the book", examples=["Dune"])
@@ -10,10 +12,10 @@ class Book(BaseModel):
 
 
 class Recommendation(BaseModel):
-    book_id: str = Field(
+    book_id: BookId = Field(
         description="Unique identifier of the recommended book", examples=["book-123"]
     )
-    score: float = Field(
+    score: Score = Field(
         description="Recommendation score, between 0.0 and 1.0", examples=[0.95], ge=0.0, le=1.0
     )
     reason: str = Field(
@@ -28,19 +30,21 @@ class RecommendationsResponse(BaseModel):
 
 
 class SimilarBooksResponse(BaseModel):
-    book_id: str = Field(description="Unique identifier of the anchor book", examples=["book-123"])
-    similar_book_ids: list[str] = Field(
+    book_id: BookId = Field(
+        description="Unique identifier of the anchor book", examples=["book-123"]
+    )
+    similar_book_ids: list[BookId] = Field(
         description="List of similar book identifiers", examples=[["book-456", "book-789"]]
     )
     trace_id: str = Field(
         description="Correlation identifier for the request", examples=["01J...XYZ"]
     )
-    algo_id: str | None = Field(
+    algo_id: AlgoId | None = Field(
         default=None,
         description="Identifier for the recommendation algorithm",
         examples=["meta_v0"],
     )
-    recs_version: str | None = Field(
+    recs_version: RecsVersion | None = Field(
         default=None,
         description="Version of the published recommendation artifacts",
         examples=["2026-02-25T03:00Z"],
