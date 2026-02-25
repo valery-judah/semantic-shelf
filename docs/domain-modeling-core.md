@@ -58,7 +58,21 @@ PopularityScope = Literal["global"]
 
 ### 7. Strict Runtime & Persistence Boundary Enforcement
 **Suggestion:** Enforce data shape boundaries dynamically to complement the static `NewType` bindings.
-- **API Boundaries:** Upgrade domain primitives by wrapping `NewType` with `typing.Annotated` and Pydantic's `Field` (e.g., `_ScoreFloat = Annotated[float, Field(ge=0.0, le=1.0)]`). This instructs Pydantic to apply strict constraints (ranges, regex patterns, min lengths) while deserializing HTTP requests, rejecting invalid inputs with a `422 Unprocessable Entity` immediately at the route edge.
+- **API Boundaries:** Upgrade domain primitives by wrapping `NewType` with `typing.Annotated` and Pydantic's `Field`. To satisfy both strict static type checkers (like Pyright, which rejects `Annotated` as the second argument to `NewType`) and Pydantic (which requires it for runtime validation), use the `typing.TYPE_CHECKING` idiom:
+  ```python
+  import typing
+  from typing import Annotated
+  from pydantic import Field
+  
+  if typing.TYPE_CHECKING:
+      # Pyright sees a strict PEP-484 compliant type
+      Score = typing.NewType("Score", float)
+  else:
+      # Pydantic sees runtime constraints via Annotated
+      _ScoreFloat = Annotated[float, Field(ge=0.0, le=1.0)]
+      Score = typing.NewType("Score", _ScoreFloat)
+  ```
+  This instructs Pydantic to apply strict constraints (ranges, regex patterns, min lengths) while deserializing HTTP requests, rejecting invalid inputs with a `422 Unprocessable Entity` immediately at the route edge, without breaking static analysis tools.
 - **Service Boundaries:** Apply Pydantic's `@validate_call` decorator to core service methods (in `book_service.py` and `user_service.py`). This guarantees internal safety—if another internal Python module explicitly calls `get_book(book_id="")`, Pydantic generates a runtime `ValidationError`, preventing propagation of badly shaped internal data.
 - **Persistence Boundaries:** Embed explicitly defined data quality expectations in `src/books_rec_api/models.py` via `CheckConstraint` (e.g., enforcing `users.id LIKE 'usr_%'` or ensuring `book_popularity.scope IN ('global')`). This serves as the ultimate fallback constraint in case a malicious or erroneous manual database script bypasses the application logic entirely.
 
