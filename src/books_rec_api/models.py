@@ -25,6 +25,8 @@ class User(Base):
     external_idp_id: Mapped[str] = mapped_column(String, unique=True, index=True)
     domain_preferences: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
+    __table_args__ = (CheckConstraint("id LIKE 'usr_%'", name="ck_users_id_format"),)
+
 
 class Book(Base):
     __tablename__ = "books"
@@ -145,3 +147,5 @@ class BookPopularity(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+
+    __table_args__ = (CheckConstraint("scope IN ('global')", name="ck_book_popularity_scope"),)

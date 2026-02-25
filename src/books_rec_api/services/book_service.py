@@ -3,6 +3,8 @@ import logging
 import time
 from datetime import datetime
 
+from pydantic import validate_call
+
 from books_rec_api.domain import AlgoId, BookId, RecsVersion
 from books_rec_api.repositories.books_repository import BooksRepository
 from books_rec_api.schemas.book import BookRead, PaginatedBooks
@@ -15,12 +17,14 @@ class BookService:
     def __init__(self, repo: BooksRepository) -> None:
         self.repo = repo
 
+    @validate_call
     def get_book(self, book_id: BookId) -> BookRead | None:
         book = self.repo.get_by_id(book_id)
         if not book:
             return None
         return BookRead.model_validate(book)
 
+    @validate_call
     def get_books(self, page: int = 1, size: int = 20, genre: str | None = None) -> PaginatedBooks:
 
         offset = (page - 1) * size
@@ -33,6 +37,7 @@ class BookService:
             size=size,
         )
 
+    @validate_call
     def get_similar_books(
         self, book_id: BookId, limit: int, trace_id: str
     ) -> SimilarBooksResponse | None:

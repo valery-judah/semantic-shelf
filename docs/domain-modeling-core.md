@@ -56,6 +56,14 @@ PopularityScope = Literal["global"]
 
 **Reasoning:** `NewType` and `TypedDict` improve static analysis but do not enforce runtime constraints by themselves. Runtime validation and normalization remain necessary for data quality and behavior consistency.
 
+### 7. Strict Runtime & Persistence Boundary Enforcement
+**Suggestion:** Enforce data shape boundaries dynamically to complement the static `NewType` bindings.
+- **API Boundaries:** Upgrade domain primitives by wrapping `NewType` with `typing.Annotated` and Pydantic's `Field` (e.g., `_ScoreFloat = Annotated[float, Field(ge=0.0, le=1.0)]`). This instructs Pydantic to apply strict constraints (ranges, regex patterns, min lengths) while deserializing HTTP requests, rejecting invalid inputs with a `422 Unprocessable Entity` immediately at the route edge.
+- **Service Boundaries:** Apply Pydantic's `@validate_call` decorator to core service methods (in `book_service.py` and `user_service.py`). This guarantees internal safety—if another internal Python module explicitly calls `get_book(book_id="")`, Pydantic generates a runtime `ValidationError`, preventing propagation of badly shaped internal data.
+- **Persistence Boundaries:** Embed explicitly defined data quality expectations in `src/books_rec_api/models.py` via `CheckConstraint` (e.g., enforcing `users.id LIKE 'usr_%'` or ensuring `book_popularity.scope IN ('global')`). This serves as the ultimate fallback constraint in case a malicious or erroneous manual database script bypasses the application logic entirely.
+
+**Reasoning:** While static types (`mypy`) prove mathematical correctness at compile-time, an external REST API and PostgreSQL database are dynamic environments. Bridging static aliases (`NewType`) with runtime evaluators (`Annotated`, `CheckConstraint`, `@validate_call`) creates an airtight domain model where illegal states are entirely unrepresentable across all IO boundaries.
+
 ## Implementation Plan
 1. Create `src/books_rec_api/domain.py` with shared Value Types.
 2. Update Pydantic schemas (`book.py`, `user.py`, `recommendation.py`).

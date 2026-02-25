@@ -1,3 +1,7 @@
+import pytest
+from pydantic import ValidationError
+
+from books_rec_api.domain import InternalUserId
 from books_rec_api.schemas.user import DomainPreferencesUpdate
 from books_rec_api.services.user_service import UserService
 
@@ -44,3 +48,12 @@ def test_update_preferences_delegates_and_returns_updated_user(
     # Then
     assert updated is not None
     assert updated.domain_preferences.ui_theme == "light"
+
+
+def test_service_validation_rejects_invalid_internal_user_id(user_service: UserService) -> None:
+    patch = DomainPreferencesUpdate(ui_theme="light")
+    with pytest.raises(ValidationError):
+        user_service.update_preferences(
+            user_id=InternalUserId("invalid_id"),  # Doesn't start with usr_
+            patch=patch,
+        )

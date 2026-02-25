@@ -1,5 +1,8 @@
 from unittest.mock import create_autospec
 
+import pytest
+from pydantic import ValidationError
+
 from books_rec_api.models import Book, BookPopularity, BookSimilarity
 from books_rec_api.repositories.books_repository import BooksRepository
 from books_rec_api.services.book_service import BookService
@@ -253,3 +256,11 @@ def test_get_similar_books_total_deduplication():
     repo.get_by_id.assert_called_once_with("A")
     repo.get_similarities.assert_called_once_with("A")
     repo.get_popularity.assert_called_once_with(scope="global")
+
+
+def test_service_validation_rejects_invalid_book_id():
+    repo = make_repo()
+    svc = BookService(repo)
+
+    with pytest.raises(ValidationError):
+        svc.get_book(book_id="")  # Empty string violates min_length=1

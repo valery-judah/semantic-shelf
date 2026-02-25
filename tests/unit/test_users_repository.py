@@ -1,5 +1,8 @@
+import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from books_rec_api.models import BookPopularity
 from books_rec_api.repositories.users_repository import UsersRepository
 from books_rec_api.schemas.user import DomainPreferences, DomainPreferencesUpdate
 
@@ -68,3 +71,20 @@ def test_update_preferences_returns_none_for_unknown_user(db_session: Session) -
     )
 
     assert updated is None
+
+
+def test_db_enforces_user_id_format(db_session: Session) -> None:
+    repo = UsersRepository(session=db_session)
+    with pytest.raises(IntegrityError):
+        repo.create(
+            id="bad_1",
+            external_idp_id="ext_bad",
+            domain_preferences=DomainPreferences(),
+        )
+
+
+def test_db_enforces_book_popularity_scope(db_session: Session) -> None:
+    pop = BookPopularity(scope="local", book_ids=[])
+    db_session.add(pop)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
