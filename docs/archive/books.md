@@ -48,7 +48,7 @@ Notes:
 
 ## 3) Phase 2: Import script for existing subsystem
 
-Create `scripts/import_goodbooks_books.py`.
+Create `scripts/import_goodbooks_books.py` (CLI entrypoint) and `scripts/goodbooks_books_importer.py` (core logic).
 
 CLI:
 - `--data-dir` path to `goodbooks-10k-extended`
@@ -63,6 +63,7 @@ Transform rules:
 - `id = str(book_id)`
 - parse `authors` / `genres` list-like strings with `ast.literal_eval` fallback to empty list
 - `publication_year` from `original_publication_year` (safe int conversion)
+- `publish_date_raw` from `publishDate` CSV column
 - numeric fields parsed with nullable-safe converters
 - keep ISBNs as strings
 
@@ -109,8 +110,13 @@ Added schema entities:
 
 `ratings.user_id` and `to_read.user_id` now reference `dataset_users.user_id`.
 
-Importer script:
+Importer scripts (CLI and logic):
+- `scripts/import_goodbooks_interactions.py` (CLI entrypoint)
+- `scripts/goodbooks_interactions_importer.py` (core logic)
+
+Importer script execution:
 - `uv run python scripts/import_goodbooks_interactions.py --data-dir ../goodbooks-10k-extended --truncate-tables`
 
-Optional sample mode:
-- `uv run python scripts/import_goodbooks_interactions.py --data-dir ../goodbooks-10k-extended --use-samples --truncate-tables`
+Optional arguments:
+- `--use-samples` for dry-run input
+- `--batch-size` default 5000
