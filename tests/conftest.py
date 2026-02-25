@@ -51,13 +51,13 @@ def test_external_idp_id() -> str:
 
 
 @pytest.fixture
-def mock_repo(db_session: Session) -> UsersRepository:
+def users_repo(db_session: Session) -> UsersRepository:
     return UsersRepository(session=db_session)
 
 
 @pytest.fixture
-def mock_user_service(mock_repo: UsersRepository) -> UserService:
-    return UserService(repo=mock_repo)
+def user_service(users_repo: UsersRepository) -> UserService:
+    return UserService(repo=users_repo)
 
 
 @pytest.fixture
