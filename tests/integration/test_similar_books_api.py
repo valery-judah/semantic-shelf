@@ -32,6 +32,30 @@ def sample_books_and_similarities(db_session: Session):
     return books
 
 
+@pytest.fixture
+def sample_books_with_anchor_and_duplicates(db_session: Session):
+    books = [Book(id=f"book-{i}", title=f"Book {i}") for i in range(1, 10)]
+    db_session.add_all(books)
+
+    sim = BookSimilarity(
+        book_id="book-1",
+        neighbor_ids=["book-2", "book-1", "book-3"],
+        recs_version="v2",
+        algo_id="meta_v0",
+    )
+    db_session.add(sim)
+
+    pop = BookPopularity(
+        scope="global",
+        book_ids=["book-3", "book-4", "book-1", "book-5"],
+        recs_version="pop_v2",
+    )
+    db_session.add(pop)
+
+    db_session.commit()
+    return books
+
+
 def test_get_similar_books_success(
     client_with_overrides: TestClient, sample_books_and_similarities
 ):
@@ -73,6 +97,18 @@ def test_get_similar_books_only_fallback(
     assert data["similar_book_ids"] == ["book-4", "book-5"]
     # Should use popularity recs_version if no neighbors found
     assert data["recs_version"] == "pop_v1"
+
+
+def test_get_similar_books_excludes_anchor_and_deduplicates_api_contract(
+    client_with_overrides: TestClient, sample_books_with_anchor_and_duplicates
+):
+    response = client_with_overrides.get("/books/book-1/similar?limit=5")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["similar_book_ids"] == ["book-2", "book-3", "book-4", "book-5"]
+    assert "book-1" not in data["similar_book_ids"]
+    assert len(data["similar_book_ids"]) == len(set(data["similar_book_ids"]))
 
 
 def test_get_similar_books_invalid_limit_below_min(
