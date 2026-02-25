@@ -48,6 +48,26 @@ Because of the automatic provisioning, you can easily simulate distinct user sce
 - `make logs` - tail the logs of the Docker Compose stack
 - `make reset-db` - clear the database volumes
 
+## Structured Logging Strategy
+When you run with Docker Compose, logs are written to container stdout/stderr so they can be collected by Docker directly.
+
+- Default format is JSON (`BOOKS_REC_LOG_FORMAT=json`) to support machine parsing in aggregators like ELK/Loki/Datadog.
+- Configure severity with `BOOKS_REC_LOG_LEVEL` (e.g., `DEBUG`, `INFO`, `WARNING`, `ERROR`).
+- Stamp each record with a service name using `BOOKS_REC_LOG_SERVICE_NAME`.
+
+### Collect Logs During Development
+- Follow all service logs: `make logs`
+- Follow API logs only: `docker compose logs -f --tail=200 api`
+- Persist API logs to a file: `docker compose logs -f api | tee logs/api.log`
+- Filter only error events from JSON logs: `docker compose logs api | rg '"level": "ERROR"'`
+
+### Example `.env` logging configuration
+```env
+BOOKS_REC_LOG_LEVEL=INFO
+BOOKS_REC_LOG_FORMAT=json
+BOOKS_REC_LOG_SERVICE_NAME=books-rec-api
+```
+
 ## Dataset Import
 - The Goodbooks source repository is `GOODBOOKS_SOURCE_REPO=https://github.com/malcolmosh/goodbooks-10k-extended.git`.
 - Before first run, clone it locally (for example next to this repo):

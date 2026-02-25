@@ -9,6 +9,9 @@ services:
     environment:
       - BOOKS_REC_APP_NAME=${BOOKS_REC_APP_NAME:-Recommendation Service MVP}
       - BOOKS_REC_DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-myuser}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-books_rec}
+      - BOOKS_REC_LOG_LEVEL=${BOOKS_REC_LOG_LEVEL:-INFO}
+      - BOOKS_REC_LOG_FORMAT=${BOOKS_REC_LOG_FORMAT:-json}
+      - BOOKS_REC_LOG_SERVICE_NAME=${BOOKS_REC_LOG_SERVICE_NAME:-books-rec-api}
     depends_on:
       db:
         condition: service_healthy
