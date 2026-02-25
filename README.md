@@ -49,6 +49,12 @@ Because of the automatic provisioning, you can easily simulate distinct user sce
 - `make reset-db` - clear the database volumes
 
 ## Dataset Import
+- The Goodbooks source repository is `GOODBOOKS_SOURCE_REPO=https://github.com/malcolmosh/goodbooks-10k-extended.git`.
+- Before first run, clone it locally (for example next to this repo):
+  - `git clone "$GOODBOOKS_SOURCE_REPO" ../goodbooks-10k-extended`
+- In your `.env`, set these variables:
+  - `GOODBOOKS_SOURCE_REPO="https://github.com/malcolmosh/goodbooks-10k-extended.git"`
+  - `GOODBOOKS_DATASET_DIR="../goodbooks-10k-extended"`
 - Import documentation: [`scripts/import.md`](scripts/import.md)
 - Rationale (short): we keep imported Goodbooks data in the existing app schema so the current `books` API stays the canonical read path, while normalized interaction tables (`dataset_users`, `ratings`, `to_read`, `tags`, `book_tags`) enforce referential integrity and support recommendation workflows.
 - First-boot auto-seed: on a fresh DB volume, Postgres runs `docker-entrypoint-initdb.d` scripts and seeds `books` from `${GOODBOOKS_DATASET_DIR}/books_enriched.csv`.
