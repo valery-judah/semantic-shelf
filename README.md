@@ -16,7 +16,8 @@ We support two primary patterns for running the app depending on your workflow:
 - **`make dev`** - Starts only the database via Docker Compose and runs the FastAPI app natively on the host using `uvicorn --reload`. This gives fast hot-reloads and consistent DB behavior.
 
 ### Pattern B: Full Stack (Recommended for testing "production-like")
-- **`make run`** - Runs both the application and database within Docker Compose (starts the full stack).
+- **`make run`** - Runs both the application and database within Docker Compose (starts the full stack without rebuilding images).
+- **`make run-build`** - Same as `make run`, but forces a rebuild of images.
 
 ## Local Testing & Authentication
 The API relies on an external Identity Provider and expects an `X-User-Id` header to identify users. The application automatically provisions a "shadow user" profile in the database the first time it encounters a new `X-User-Id`.
@@ -39,7 +40,10 @@ Because of the automatic provisioning, you can easily simulate distinct user sce
 ### Development & Lifecycle
 - `make sync` - install dependencies with uv
 - `make dev` - start local db and run FastAPI app locally with fast reload
-- `make run` - run full stack (app + db) via Docker Compose
+- `make run` - run full stack (app + db) via Docker Compose without rebuilding
+- `make run-build` - run full stack and rebuild Docker images
+- `make run-api` - run only API service (and dependencies) without rebuilding
+- `make run-api-build` - run only API service (and dependencies) and rebuild API image
 - `make down` - stop and remove Docker Compose containers
 - `make logs` - tail the logs of the Docker Compose stack
 - `make reset-db` - clear the database volumes

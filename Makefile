@@ -56,7 +56,18 @@ ci: ## Run the full CI pipeline script locally
 # ==============================================================================
 
 .PHONY: run
-run: up ## Run the full stack using docker compose
+run: up ## Run the full stack using docker compose (no image rebuild)
+
+.PHONY: run-build
+run-build: up-build ## Run the full stack and rebuild images
+
+.PHONY: run-api
+run-api: ## Start only the API service (and dependencies) without rebuilding
+	$(COMPOSE) up -d $(APP)
+
+.PHONY: run-api-build
+run-api-build: ## Start only the API service (and dependencies) and rebuild API image
+	$(COMPOSE) up -d --build $(APP)
 
 .PHONY: dev
 dev: migrate ## Run the local app with uvicorn and docker db
@@ -68,6 +79,10 @@ dev: migrate ## Run the local app with uvicorn and docker db
 
 .PHONY: up
 up: ## Start the full stack in the background
+	$(COMPOSE) up -d --remove-orphans
+
+.PHONY: up-build
+up-build: ## Start the full stack in the background and rebuild images
 	$(COMPOSE) up -d --build --remove-orphans
 
 .PHONY: down
