@@ -322,8 +322,8 @@ Event: `similar_click`
 |ts|string|yes|ISO-8601 UTC|
 |request_id|string|yes|join to impression/request|
 |anchor_book_id|string|yes||
-|clicked_book_id|string|yes||
-|position|int|yes|position at time of click|
+|clicked_book_id|string|yes|MUST exist in `shown_book_ids` for matched impression|
+|position|int|yes|MUST match the shown position for `clicked_book_id`|
 |algo_id|string|yes||
 |recs_version|string|yes||
 
@@ -423,6 +423,9 @@ Requires `reading_start`, `reading_finish`, etc.
 
 - Define an evaluation window (e.g., 24h post-impression).
 - Deduplicate multiple clicks per impression (policy: first click only, or any click).
+- Validate click attribution against the matched impression before scoring:
+    - ignore clicks where `clicked_book_id` is not in `shown_book_ids`
+    - ignore clicks where `position` does not match the shown position for that `clicked_book_id`
 - Handle position bias:
     - report metrics by position bucket
     - consider inverse propensity weighting later (optional)

@@ -39,13 +39,11 @@ class SimilarBooksResponse(BaseModel):
     trace_id: str = Field(
         description="Correlation identifier for the request", examples=["01J...XYZ"]
     )
-    algo_id: AlgoId | None = Field(
-        default=None,
+    algo_id: AlgoId = Field(
         description="Identifier for the recommendation algorithm",
         examples=["meta_v0"],
     )
-    recs_version: RecsVersion | None = Field(
-        default=None,
+    recs_version: RecsVersion = Field(
         description="Version of the published recommendation artifacts",
         examples=["2026-02-25T03:00Z"],
     )

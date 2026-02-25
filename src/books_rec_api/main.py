@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from books_rec_api.api.routes.books import router as books_router
 from books_rec_api.api.routes.recommendations import router as recommendations_router
+from books_rec_api.api.routes.telemetry import router as telemetry_router
 from books_rec_api.api.routes.users import router as users_router
 from books_rec_api.config import settings
 from books_rec_api.logging_config import configure_logging
@@ -23,4 +24,5 @@ app = FastAPI(
 )
 app.include_router(books_router)
 app.include_router(recommendations_router)
+app.include_router(telemetry_router)
 app.include_router(users_router)

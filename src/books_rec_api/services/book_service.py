@@ -110,6 +110,6 @@ class BookService:
             book_id=BookId(book_id),
             similar_book_ids=[BookId(nid) for nid in result_ids],
             trace_id=trace_id,
-            algo_id=AlgoId(algo_id) if algo_id else None,
-            recs_version=RecsVersion(recs_version) if recs_version else None,
+            algo_id=AlgoId(algo_id) if algo_id else AlgoId("unknown"),
+            recs_version=RecsVersion(recs_version) if recs_version else RecsVersion("unknown"),
         )

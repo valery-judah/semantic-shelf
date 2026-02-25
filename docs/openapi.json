@@ -100,6 +100,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
               "title": "Book Id"
             }
           }
@@ -143,6 +145,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 36,
               "title": "Book Id"
             }
           },
@@ -378,6 +382,8 @@
           },
           "id": {
             "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
             "title": "Id"
           }
         },
@@ -509,6 +515,8 @@
         "properties": {
           "book_id": {
             "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
             "title": "Book Id",
             "description": "Unique identifier of the recommended book",
             "examples": [
@@ -568,6 +576,8 @@
         "properties": {
           "book_id": {
             "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
             "title": "Book Id",
             "description": "Unique identifier of the anchor book",
             "examples": [
@@ -576,7 +586,9 @@
           },
           "similar_book_ids": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 36,
+              "minLength": 1
             },
             "type": "array",
             "title": "Similar Book Ids",
@@ -599,7 +611,8 @@
           "algo_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -614,7 +627,8 @@
           "recs_version": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -652,6 +666,7 @@
         "properties": {
           "id": {
             "type": "string",
+            "pattern": "^usr_[a-f0-9\\-]+$",
             "title": "Id",
             "description": "Unique internal ID of the user",
             "examples": [
@@ -660,6 +675,7 @@
           },
           "external_idp_id": {
             "type": "string",
+            "minLength": 1,
             "title": "External Idp Id",
             "description": "External Identity Provider ID",
             "examples": [
