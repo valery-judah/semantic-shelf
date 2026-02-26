@@ -105,3 +105,39 @@ class EventBatchResponse(BaseModel):
     status: Literal["accepted"] = "accepted"
     inserted_count: int = Field(description="Number of newly inserted events")
     duplicate_count: int = Field(description="Number of events ignored as duplicates")
+
+
+class EvalTelemetryEventBase(BaseModel):
+    """Base read model for evaluator quality metric events."""
+
+    event_name: str = Field(description="The name of the event")
+    ts: datetime = Field(description="Timestamp of the event in UTC")
+    request_id: str = Field(description="Join key, matching the trace_id from the API")
+    run_id: str = Field(description="The evaluation run identifier")
+    surface: str = Field(description="The UI surface where recommendations were shown")
+    arm: Literal["baseline", "candidate", "unknown"] = Field(
+        description="The experiment arm associated with the event"
+    )
+    anchor_book_id: str | None = Field(default=None, description="The ID of the anchor book")
+    is_synthetic: bool = Field(
+        description="Whether the event is synthetically generated for testing"
+    )
+    idempotency_key: str = Field(description="Deterministic key for duplicate event handling")
+
+
+class EvalSimilarImpressionEvent(EvalTelemetryEventBase):
+    event_name: Literal["similar_impression"]
+    shown_book_ids: list[str] = Field(description="List of book IDs shown to the user")
+    positions: list[int] = Field(description="Positions of the shown books (0-indexed)")
+
+
+class EvalSimilarClickEvent(EvalTelemetryEventBase):
+    event_name: Literal["similar_click"]
+    clicked_book_id: str = Field(description="The ID of the book that was clicked")
+    position: int = Field(description="Position of the clicked book (0-indexed)", ge=0)
+
+
+EvalTelemetryEvent = Annotated[
+    EvalSimilarImpressionEvent | EvalSimilarClickEvent,
+    Field(discriminator="event_name"),
+]

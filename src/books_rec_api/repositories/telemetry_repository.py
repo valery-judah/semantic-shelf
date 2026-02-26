@@ -1,13 +1,22 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+import logging
 from typing import Any
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from books_rec_api.models import TelemetryEvent
+from books_rec_api.schemas.telemetry import (
+    EvalSimilarClickEvent,
+    EvalSimilarImpressionEvent,
+    EvalTelemetryEvent,
+)
 from books_rec_api.schemas.telemetry import TelemetryEvent as SchemaTelemetryEvent
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,6 +57,104 @@ class TelemetryRepository:
         duplicate_count = len(events) - inserted_count
 
         return TelemetryInsertResult(inserted_count=inserted_count, duplicate_count=duplicate_count)
+
+    def get_events_by_run_id(
+        self, run_id: str, event_names: Sequence[str] | None = None
+    ) -> list[EvalTelemetryEvent]:
+        """
+        Retrieves telemetry events by run_id for evaluator usage.
+        Filters by metric-relevant event names by default if not specified.
+        Returns evaluator read models rather than full ingest models.
+        """
+        if event_names is None:
+            event_names = ["similar_impression", "similar_click"]
+
+        stmt = (
+            select(TelemetryEvent)
+            .where(TelemetryEvent.run_id == run_id)
+            .where(TelemetryEvent.event_name.in_(event_names))
+            .where(
+                or_(
+                    TelemetryEvent.event_name != "similar_click",
+                    and_(
+                        TelemetryEvent.clicked_book_id.is_not(None),
+                        TelemetryEvent.clicked_book_id != "",
+                        TelemetryEvent.position.is_not(None),
+                        TelemetryEvent.position >= 0,
+                    ),
+                )
+            )
+            .order_by(TelemetryEvent.ts.asc())
+        )
+
+        rows = self._session.execute(stmt).scalars().all()
+        events: list[EvalTelemetryEvent] = []
+        for row in rows:
+            event = self._to_eval_event(row)
+            if event is not None:
+                events.append(event)
+        return events
+
+    @staticmethod
+    def _to_eval_event(row: TelemetryEvent) -> EvalTelemetryEvent | None:
+        if row.event_name == "similar_impression":
+            return EvalSimilarImpressionEvent(
+                event_name="similar_impression",
+                ts=row.ts,
+                request_id=row.request_id,
+                run_id=row.run_id,
+                surface=row.surface,
+                arm=row.arm,  # type: ignore[arg-type]
+                anchor_book_id=row.anchor_book_id,
+                is_synthetic=row.is_synthetic,
+                idempotency_key=row.idempotency_key,
+                shown_book_ids=row.shown_book_ids or [],
+                positions=row.positions or [],
+            )
+        elif row.event_name == "similar_click":
+            if row.clicked_book_id is None or row.clicked_book_id == "":
+                logger.warning(
+                    "Skipping malformed similar_click row with missing clicked_book_id "
+                    "run_id=%s request_id=%s idempotency_key=%s",
+                    row.run_id,
+                    row.request_id,
+                    row.idempotency_key,
+                )
+                return None
+            if row.position is None:
+                logger.warning(
+                    "Skipping malformed similar_click row with missing position "
+                    "run_id=%s request_id=%s idempotency_key=%s",
+                    row.run_id,
+                    row.request_id,
+                    row.idempotency_key,
+                )
+                return None
+            if row.position < 0:
+                logger.warning(
+                    "Skipping malformed similar_click row with negative position "
+                    "run_id=%s request_id=%s idempotency_key=%s position=%s",
+                    row.run_id,
+                    row.request_id,
+                    row.idempotency_key,
+                    row.position,
+                )
+                return None
+            return EvalSimilarClickEvent(
+                event_name="similar_click",
+                ts=row.ts,
+                request_id=row.request_id,
+                run_id=row.run_id,
+                surface=row.surface,
+                arm=row.arm,  # type: ignore[arg-type]
+                anchor_book_id=row.anchor_book_id,
+                is_synthetic=row.is_synthetic,
+                idempotency_key=row.idempotency_key,
+                clicked_book_id=row.clicked_book_id,
+                position=row.position,
+            )
+        else:
+            raise ValueError(f"Unsupported eval event type: {row.event_name}")
 
     @staticmethod
     def _to_row(event: SchemaTelemetryEvent) -> dict[str, Any]:

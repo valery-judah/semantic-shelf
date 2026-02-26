@@ -1,11 +1,12 @@
 import json
 import logging
+from collections.abc import Sequence
 
 from books_rec_api.repositories.telemetry_repository import (
     TelemetryInsertResult,
     TelemetryRepository,
 )
-from books_rec_api.schemas.telemetry import TelemetryEvent
+from books_rec_api.schemas.telemetry import EvalTelemetryEvent, TelemetryEvent
 
 logger = logging.getLogger(__name__)
 
@@ -42,3 +43,11 @@ class TelemetryService:
         )
 
         return insert_result
+
+    def get_events_by_run_id(
+        self, run_id: str, event_names: Sequence[str] | None = None
+    ) -> list[EvalTelemetryEvent]:
+        """
+        Retrieves telemetry events by run_id for evaluator usage.
+        """
+        return self._repo.get_events_by_run_id(run_id, event_names=event_names)

@@ -352,3 +352,18 @@ def test_invalid_empty_idempotency_key():
             clicked_book_id="B",
             position=0,
         )
+
+
+def test_telemetry_service_get_events_by_run_id():
+    repo = MagicMock()
+    service = TelemetryService(repo=repo)
+
+    mock_events = [MagicMock()]
+    repo.get_events_by_run_id.return_value = mock_events
+
+    result = service.get_events_by_run_id("test-run", event_names=["similar_impression"])
+
+    assert result == mock_events
+    repo.get_events_by_run_id.assert_called_once_with(
+        "test-run", event_names=["similar_impression"]
+    )
