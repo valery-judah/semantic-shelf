@@ -10,6 +10,7 @@ __pycache__/
 # Packaging / build artifacts
 build/
 dist/
+artifacts/
 *.egg-info/
 .eggs/
 *.egg

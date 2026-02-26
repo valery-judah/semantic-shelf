@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import UTC, datetime
 
+from books_rec_api.context import eval_request_id_var, eval_run_id_var
+
 
 class JsonFormatter(logging.Formatter):
     def __init__(self, service_name: str):
@@ -16,6 +18,14 @@ class JsonFormatter(logging.Formatter):
             "service": self.service_name,
             "message": record.getMessage(),
         }
+
+        eval_run_id = eval_run_id_var.get()
+        if eval_run_id:
+            payload["eval_run_id"] = eval_run_id
+
+        eval_request_id = eval_request_id_var.get()
+        if eval_request_id:
+            payload["request_id"] = eval_request_id
 
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)

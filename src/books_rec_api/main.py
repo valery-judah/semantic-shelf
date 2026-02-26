@@ -8,6 +8,7 @@ from books_rec_api.api.routes.telemetry import router as telemetry_router
 from books_rec_api.api.routes.users import router as users_router
 from books_rec_api.config import settings
 from books_rec_api.logging_config import configure_logging
+from books_rec_api.middleware import EvalContextMiddleware
 
 configure_logging(
     level=settings.log_level,
@@ -22,6 +23,7 @@ app = FastAPI(
     description=settings.app_description,
     version=settings.app_version,
 )
+app.add_middleware(EvalContextMiddleware)
 app.include_router(books_router)
 app.include_router(recommendations_router)
 app.include_router(telemetry_router)
