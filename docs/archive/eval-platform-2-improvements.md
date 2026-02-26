@@ -23,10 +23,10 @@ This section tracks what has already been implemented versus what remains.
 - [x] Formal debug sample schema added (`DebugRequestSample`) with `debug_schema_version`.
 - [x] "How to reproduce" section added to report output.
 - [x] Unit coverage added for strict schema/version failures and malformed requests rows.
-
-### Not done yet
 - [x] Parser split into dedicated modules is complete (`eval/parsers/requests_parser.py`).
 - [x] Metrics/rendering extraction into dedicated modules is complete (`eval/metrics.py`, `eval/rendering.py`).
+
+### Not done yet
 - [ ] Loadgen broad `except Exception` cleanup is still pending.
 - [ ] Full determinism regression tests from section 5.2 are still pending.
 - [ ] Expanded debug bundle tests from section 5.1 are still pending (sample cap/no-overwrite/pointer-completeness assertions).
