@@ -25,7 +25,7 @@ This section tracks what has already been implemented versus what remains.
 - [x] Unit coverage added for strict schema/version failures and malformed requests rows.
 
 ### Not done yet
-- [ ] Parser split into dedicated modules (`eval/parsers/*`) is still pending.
+- [x] Parser split into dedicated modules is complete (`eval/parsers/requests_parser.py`).
 - [x] Metrics/rendering extraction into dedicated modules is complete (`eval/metrics.py`, `eval/rendering.py`).
 - [ ] Loadgen broad `except Exception` cleanup is still pending.
 - [ ] Full determinism regression tests from section 5.2 are still pending.
