@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 
 from books_rec_api.schemas.telemetry import (
     EventBatchRequest,
@@ -17,16 +18,22 @@ def test_valid_similar_impression_event():
         event_name="similar_impression",
         ts=datetime.now(UTC),
         request_id="trace-123",
+        run_id="run-1",
+        surface="book_detail",
+        arm="baseline",
+        is_synthetic=False,
+        idempotency_key="idempotent-123",
         anchor_book_id="A",
         algo_id="meta_v0",
         recs_version="v1",
-        surface="book_detail",
         shown_book_ids=["B", "C"],
         positions=[0, 1],
     )
     assert event.event_name == "similar_impression"
     assert event.shown_book_ids == ["B", "C"]
     assert event.positions == [0, 1]
+    assert event.telemetry_schema_version == "1.0.0"
+    assert event.run_id == "run-1"
 
 
 def test_invalid_similar_impression_event_positions_length():
@@ -35,10 +42,14 @@ def test_invalid_similar_impression_event_positions_length():
             event_name="similar_impression",
             ts=datetime.now(UTC),
             request_id="trace-123",
+            run_id="run-1",
+            surface="book_detail",
+            arm="baseline",
+            is_synthetic=False,
+            idempotency_key="idempotent-123",
             anchor_book_id="A",
             algo_id="meta_v0",
             recs_version="v1",
-            surface="book_detail",
             shown_book_ids=["B", "C"],
             positions=[0],  # Mismatch length
         )
@@ -50,10 +61,14 @@ def test_invalid_similar_impression_event_negative_position():
             event_name="similar_impression",
             ts=datetime.now(UTC),
             request_id="trace-123",
+            run_id="run-1",
+            surface="book_detail",
+            arm="baseline",
+            is_synthetic=False,
+            idempotency_key="idempotent-123",
             anchor_book_id="A",
             algo_id="meta_v0",
             recs_version="v1",
-            surface="book_detail",
             shown_book_ids=["B"],
             positions=[-1],
         )
@@ -64,6 +79,11 @@ def test_valid_similar_click_event():
         event_name="similar_click",
         ts=datetime.now(UTC),
         request_id="trace-123",
+        run_id="run-1",
+        surface="book_detail",
+        arm="baseline",
+        is_synthetic=False,
+        idempotency_key="idempotent-123",
         anchor_book_id="A",
         algo_id="meta_v0",
         recs_version="v1",
@@ -80,6 +100,11 @@ def test_invalid_similar_click_event_negative_position():
             event_name="similar_click",
             ts=datetime.now(UTC),
             request_id="trace-123",
+            run_id="run-1",
+            surface="book_detail",
+            arm="baseline",
+            is_synthetic=False,
+            idempotency_key="idempotent-123",
             anchor_book_id="A",
             algo_id="meta_v0",
             recs_version="v1",
@@ -95,10 +120,14 @@ def test_event_batch_request_discriminator():
                 "event_name": "similar_impression",
                 "ts": "2026-02-25T19:00:00Z",
                 "request_id": "req-1",
+                "run_id": "run-1",
+                "surface": "book_detail",
+                "arm": "baseline",
+                "is_synthetic": False,
+                "idempotency_key": "idempotent-1",
                 "anchor_book_id": "A",
                 "algo_id": "algo-1",
                 "recs_version": "v1",
-                "surface": "shelf",
                 "shown_book_ids": ["B"],
                 "positions": [0],
             },
@@ -106,6 +135,11 @@ def test_event_batch_request_discriminator():
                 "event_name": "similar_click",
                 "ts": "2026-02-25T19:01:00Z",
                 "request_id": "req-1",
+                "run_id": "run-1",
+                "surface": "book_detail",
+                "arm": "baseline",
+                "is_synthetic": False,
+                "idempotency_key": "idempotent-2",
                 "anchor_book_id": "A",
                 "algo_id": "algo-1",
                 "recs_version": "v1",
@@ -116,6 +150,11 @@ def test_event_batch_request_discriminator():
                 "event_name": "similar_rating",
                 "ts": "2026-02-25T19:02:00Z",
                 "request_id": "req-1",
+                "run_id": "run-1",
+                "surface": "book_detail",
+                "arm": "baseline",
+                "is_synthetic": False,
+                "idempotency_key": "idempotent-3",
                 "anchor_book_id": "A",
                 "algo_id": "algo-1",
                 "recs_version": "v1",
@@ -137,6 +176,11 @@ def test_telemetry_service_process_events(caplog):
         event_name="similar_click",
         ts=datetime(2026, 2, 25, 19, 0, 0, tzinfo=UTC),
         request_id="trace-123",
+        run_id="run-1",
+        surface="book_detail",
+        arm="baseline",
+        is_synthetic=False,
+        idempotency_key="idempotent-123",
         anchor_book_id="A",
         algo_id="meta_v0",
         recs_version="v1",
@@ -150,11 +194,43 @@ def test_telemetry_service_process_events(caplog):
     assert '"clicked_book_id": "B"' in caplog.text
 
 
+def test_telemetry_service_eval_run_id_deprecation_warning(caplog):
+    payload = {
+        "event_name": "similar_click",
+        "ts": "2026-02-25T19:00:00Z",
+        "request_id": "req-1",
+        "eval_run_id": "run-compat",
+        "surface": "book_detail",
+        "arm": "baseline",
+        "is_synthetic": False,
+        "idempotency_key": "idempotent-1",
+        "anchor_book_id": "A",
+        "algo_id": "algo-1",
+        "recs_version": "v1",
+        "clicked_book_id": "B",
+        "position": 0,
+    }
+    # Parsing should canonicalize eval_run_id -> run_id
+    event = SimilarClickEvent.model_validate(payload)
+    assert event.run_id == "run-compat"
+    assert event.eval_run_id == "run-compat"
+
+    service = TelemetryService()
+    service.process_events([event])
+
+    assert "Deprecated field 'eval_run_id' used in telemetry event similar_click" in caplog.text
+
+
 def test_valid_similar_shelf_add_event_with_experiment_fields():
     event = SimilarShelfAddEvent(
         event_name="similar_shelf_add",
         ts=datetime.now(UTC),
         request_id="trace-123",
+        run_id="run-1",
+        surface="book_detail",
+        arm="baseline",
+        is_synthetic=False,
+        idempotency_key="idempotent-123",
         anchor_book_id="A",
         algo_id="meta_v0",
         recs_version="v1",
@@ -175,6 +251,11 @@ def test_valid_similar_rating_event():
         event_name="similar_rating",
         ts=datetime.now(UTC),
         request_id="trace-123",
+        run_id="run-1",
+        surface="book_detail",
+        arm="baseline",
+        is_synthetic=False,
+        idempotency_key="idempotent-123",
         anchor_book_id="A",
         algo_id="meta_v0",
         recs_version="v1",
@@ -191,6 +272,11 @@ def test_invalid_similar_rating_event_out_of_bounds():
             event_name="similar_rating",
             ts=datetime.now(UTC),
             request_id="trace-123",
+            run_id="run-1",
+            surface="book_detail",
+            arm="baseline",
+            is_synthetic=False,
+            idempotency_key="idempotent-123",
             anchor_book_id="A",
             algo_id="meta_v0",
             recs_version="v1",
@@ -203,9 +289,52 @@ def test_invalid_similar_rating_event_out_of_bounds():
             event_name="similar_rating",
             ts=datetime.now(UTC),
             request_id="trace-123",
+            run_id="run-1",
+            surface="book_detail",
+            arm="baseline",
+            is_synthetic=False,
+            idempotency_key="idempotent-123",
             anchor_book_id="A",
             algo_id="meta_v0",
             recs_version="v1",
             book_id="B",
             rating_value=0,
+        )
+
+
+def test_invalid_empty_run_id():
+    with pytest.raises(ValidationError):
+        SimilarClickEvent(
+            event_name="similar_click",
+            ts=datetime.now(UTC),
+            request_id="trace-123",
+            run_id="",  # Invalid, min length is 1
+            surface="book_detail",
+            arm="baseline",
+            is_synthetic=False,
+            idempotency_key="idempotent-123",
+            anchor_book_id="A",
+            algo_id="meta_v0",
+            recs_version="v1",
+            clicked_book_id="B",
+            position=0,
+        )
+
+
+def test_invalid_empty_idempotency_key():
+    with pytest.raises(ValidationError):
+        SimilarClickEvent(
+            event_name="similar_click",
+            ts=datetime.now(UTC),
+            request_id="trace-123",
+            run_id="run-1",
+            surface="book_detail",
+            arm="baseline",
+            is_synthetic=False,
+            idempotency_key="",  # Invalid, min length is 1
+            anchor_book_id="A",
+            algo_id="meta_v0",
+            recs_version="v1",
+            clicked_book_id="B",
+            position=0,
         )

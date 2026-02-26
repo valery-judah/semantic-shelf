@@ -192,18 +192,18 @@ async def run_load(
     failures: list[ValidationFailure] = []
 
     concurrency = scenario_config.traffic.concurrency
-    
+
     # Optional ramp up
     ramp_up_seconds = 0
     if hasattr(scenario_config.traffic, "ramp_up_seconds"):
-         ramp_up_seconds = scenario_config.traffic.ramp_up_seconds
+        ramp_up_seconds = scenario_config.traffic.ramp_up_seconds
 
     # Shared state for workers
     next_anchor_idx = 0
 
     async def run_phase(phase: str, duration: int | None, count: int | None):
         stop_event = asyncio.Event()
-        
+
         # We use a shared iterator for request_count to ensure exactly that many requests
         request_iterator = None
         if count is not None:
@@ -298,20 +298,21 @@ async def run_load(
             workers.append(asyncio.create_task(worker(start_delay=delay)))
 
         if duration is not None:
-            # Add ramp_up_seconds to duration to ensure full load duration? 
+            # Add ramp_up_seconds to duration to ensure full load duration?
             # Or is duration inclusive? Usually duration is total time.
             # But let's assume duration is the measurement window.
             # The prompt says: "Ramp-up duration before target concurrency".
             # So we should wait ramp_up + duration?
-            # Let's keep it simple: wait duration, then stop. 
+            # Let's keep it simple: wait duration, then stop.
             # If ramp up is large, effective duration at full concurrency is smaller.
             # But usually we run steady state after ramp up.
-            # Here I'm applying ramp up to every phase. 
+            # Here I'm applying ramp up to every phase.
             # Maybe ramp up only applies to steady state?
             # Or maybe warm up implies ramping up?
             # Given the plan doesn't specify complex ramp up behavior, I'll just use duration.
-            
-            # If ramp_up is set, we sleep duration + ramp_up? No, usually duration includes everything.
+
+            # If ramp_up is set, we sleep duration + ramp_up?
+            # No, usually duration includes everything.
             await asyncio.sleep(duration)
             stop_event.set()
 
@@ -329,7 +330,7 @@ async def run_load(
     # 2. Steady-State Phase
     duration_seconds = scenario_config.traffic.duration_seconds
     request_count = scenario_config.traffic.request_count
-    
+
     logger.info("Starting steady-state phase...")
     await run_phase("steady_state", duration_seconds, request_count)
 
@@ -378,7 +379,8 @@ async def run_load(
             f.write(req.model_dump_json() + "\n")
 
     logger.info(
-        f"Load generation complete. Total requests: {len(results)} ({len(steady_results)} steady). Failures: {len(failures)}."
+        f"Load generation complete. Total requests: {len(results)} "
+        f"({len(steady_results)} steady). Failures: {len(failures)}."
     )
 
 

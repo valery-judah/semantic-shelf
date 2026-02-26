@@ -47,7 +47,7 @@ class RequestRecord(BaseModel):
     timestamp: datetime
     phase: str | None = Field(
         "steady_state",
-        description="Execution phase: 'warmup' or 'steady_state'. Defaults to 'steady_state' for backward compatibility.",
+        description="Execution phase: 'warmup' or 'steady_state'. Defaults to 'steady_state'.",
     )
 
     @model_validator(mode="before")

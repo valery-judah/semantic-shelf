@@ -1,13 +1,31 @@
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 
 class TelemetryEventBase(BaseModel):
+    telemetry_schema_version: Literal["1.0.0"] = Field(
+        default="1.0.0", description="Schema version"
+    )
     ts: datetime = Field(description="Timestamp of the event in UTC")
-    request_id: str = Field(description="Join key, matching the trace_id from the API")
+    request_id: str = Field(
+        min_length=1, description="Join key, matching the trace_id from the API"
+    )
+    run_id: str = Field(min_length=1, description="The evaluation run identifier")
+    eval_run_id: str | None = Field(default=None, description="Deprecated. Use run_id instead.")
+    surface: str = Field(description="The UI surface where recommendations were shown")
+    arm: Literal["baseline", "candidate", "unknown"] = Field(
+        description="The experiment arm associated with the event"
+    )
     anchor_book_id: str = Field(description="The ID of the anchor book")
+    is_synthetic: bool = Field(
+        description="Whether the event is synthetically generated for testing"
+    )
+    idempotency_key: str = Field(
+        min_length=1, description="Deterministic key for duplicate event handling"
+    )
+
     algo_id: str = Field(description="The algorithm identifier used")
     recs_version: str = Field(description="The recommendation artifacts version")
     experiment_id: str | None = Field(default=None, description="The experiment identifier")
@@ -16,10 +34,17 @@ class TelemetryEventBase(BaseModel):
         default=None, description="Pseudonymous hash of the assignment key"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def canonicalize_run_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "eval_run_id" in data and "run_id" not in data:
+                data["run_id"] = data["eval_run_id"]
+        return data
+
 
 class SimilarImpressionEvent(TelemetryEventBase):
     event_name: Literal["similar_impression"]
-    surface: str = Field(description="The UI surface where recommendations were shown")
     shown_book_ids: list[str] = Field(description="List of book IDs shown to the user")
     positions: list[int] = Field(description="Positions of the shown books (0-indexed)")
     client_platform: str | None = Field(default=None, description="e.g., ios, android, web")

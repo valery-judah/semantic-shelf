@@ -288,7 +288,7 @@ Primary files expected to change:
 
 ## 11) Done Checklist
 
-- [ ] Telemetry schema v1 implemented and validated
+- [x] Telemetry schema v1 implemented and validated
 - [ ] `telemetry_events` table + indices + unique constraint added
 - [ ] idempotent DB writes implemented
 - [ ] loadgen synthetic telemetry emission implemented

@@ -12,6 +12,13 @@ class TelemetryService:
         Processes a batch of pre-validated telemetry events and emits them as structured JSON logs.
         """
         for event in events:
+            if getattr(event, "eval_run_id", None) is not None:
+                logger.warning(
+                    "Deprecated field 'eval_run_id' used in telemetry event %s. "
+                    "Use 'run_id' instead.",
+                    event.event_name,
+                )
+
             # Convert the model to a dictionary, ensuring datetime objects are serialized
             event_dict = event.model_dump(mode="json")
             # Emit as a structured JSON log that the log shipper will identify
