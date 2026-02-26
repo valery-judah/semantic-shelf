@@ -258,7 +258,7 @@ Report must include:
 
 ### Implementation checklist
 
-- [ ] Parser modules per raw artifact type
+- [x] Parser modules per raw artifact type
 - [ ] Metric computation layer with unit tests
 - [ ] Report template with stable headings
 - [ ] "debug bundle writer" for top N anchors
