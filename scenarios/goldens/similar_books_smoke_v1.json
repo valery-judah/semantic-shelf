@@ -1,0 +1,15 @@
+{
+  "golden_id": "similar_books_smoke",
+  "version": "1",
+  "scenario_id": "similar_books_smoke",
+  "dataset_id": "local_dev",
+  "seed": 42,
+  "created_at": "2026-02-26T00:00:00Z",
+  "anchors": [
+    {"anchor_id": "1", "metadata": {"language": "en", "popularity_bucket": "head"}},
+    {"anchor_id": "2", "metadata": {"language": "en", "popularity_bucket": "head"}},
+    {"anchor_id": "3", "metadata": {"language": "en", "popularity_bucket": "tail"}},
+    {"anchor_id": "4", "metadata": {"language": "es", "popularity_bucket": "head"}},
+    {"anchor_id": "5", "metadata": {"language": "fr", "popularity_bucket": "tail"}}
+  ]
+}

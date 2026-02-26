@@ -1,0 +1,36 @@
+slices:
+  - slice_id: pop_head
+    description: High-popularity anchors
+    priority: 1
+    min_sample_size: 1
+    membership_rule:
+      type: field_equals
+      field: popularity_bucket
+      value: head
+
+  - slice_id: pop_tail
+    description: Low-popularity anchors
+    priority: 2
+    min_sample_size: 1
+    membership_rule:
+      type: field_equals
+      field: popularity_bucket
+      value: tail
+
+  - slice_id: language_en
+    description: English anchors
+    priority: 3
+    min_sample_size: 1
+    membership_rule:
+      type: field_equals
+      field: language
+      value: en
+
+  - slice_id: language_non_en
+    description: Non-English anchors
+    priority: 4
+    min_sample_size: 1
+    membership_rule:
+      type: field_in
+      field: language
+      values: ["es", "fr", "de", "pt", "it", "ja", "ko"]

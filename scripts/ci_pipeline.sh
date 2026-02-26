@@ -45,7 +45,8 @@ echo ""
 echo "📊 7. Running Evaluation Smoke Test..."
 # Run the smoke scenario and gate on correctness/performance
 # We skip the build here since we just built it in step 6
-uv run python scripts/ci_eval.py --scenario similar_books_smoke --no-build
+# Stage 4 rollout: specify golden-only as default for smoke, or paired-enforced if using paired scenarios
+uv run python scripts/ci_eval.py --scenario similar_books_smoke --no-build --stage4-mode golden-only
 
 echo ""
 echo "========================================"

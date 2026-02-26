@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from typing import Any
+
 from pydantic import ValidationError
 
 from eval.anchors import AnchorSelectionInputs, select_anchors
@@ -84,13 +86,14 @@ def write_run_metadata(ctx: RunContext) -> None:
     run_json_path.write_text(run_meta.model_dump_json(indent=2), encoding="utf-8")
 
 
-def write_anchor_selection(ctx: RunContext, anchors: list[str]) -> None:
+def write_anchor_selection(ctx: RunContext, anchors: list[str], metadata: dict[str, dict[str, Any]]) -> None:
     selection = AnchorSelection(
         run_id=ctx.run_id,
         scenario_id=ctx.scenario_id,
         dataset_id=ctx.dataset_id,
         seed=ctx.seed,
         anchors=anchors,
+        anchor_metadata=metadata,
     )
     anchors_path = ctx.raw_dir / "anchors.json"
     anchors_path.write_text(selection.model_dump_json(indent=2), encoding="utf-8")
@@ -102,7 +105,7 @@ def main() -> None:
         setup_run_directories(ctx)
         write_run_metadata(ctx)
 
-        anchors = select_anchors(
+        anchors, metadata = select_anchors(
             AnchorSelectionInputs(
                 dataset_id=ctx.dataset_id,
                 scenario_id=ctx.scenario_id,
@@ -110,7 +113,7 @@ def main() -> None:
                 count=ctx.anchor_count,
             )
         )
-        write_anchor_selection(ctx, anchors)
+        write_anchor_selection(ctx, anchors, metadata)
     except (ValidationError, ValueError) as exc:
         logger.error("Failed to build valid evaluation artifacts: %s", exc)
         sys.exit(1)

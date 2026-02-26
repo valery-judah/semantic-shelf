@@ -637,6 +637,28 @@ Example invocation pattern:
 - run: `make eval-similar-smoke`
 - teardown: `docker compose down -v` (optional in CI)
 
+### Advanced Execution (Stage 4)
+
+**Running with Golden Sets**
+
+To use a stable, versioned set of anchors (reducing noise), specify the golden set ID:
+
+```bash
+./scripts/eval_run.sh similar_books_smoke --dataset-id similar_books_smoke_v1
+```
+
+**Running Paired Arms**
+
+To compare a candidate against a baseline within the same run (reducing environmental noise), use a scenario configured with `paired_arms: true`:
+
+```bash
+./scripts/eval_run.sh similar_books_paired --dataset-id similar_books_smoke_v1
+```
+
+This will produce a report with:
+- Per-slice metrics (head/tail, language, etc.)
+- Paired delta analysis (candidate vs baseline latency and correctness)
+
 ## CI integration and regression gating
 ### CI job outline
 

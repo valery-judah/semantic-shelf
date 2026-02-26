@@ -355,42 +355,97 @@ Soft gates (warn only):
 
 **D4.1 Golden anchor sets**
 
-- Versioned files for stable evaluation anchors:
-  - smoke golden (small)
-  - perf golden (optional)
-  - slice-specific goldens (optional)
-- Document refresh strategy:
-  - do not refresh frequently; treat updates as explicit changes with version bump.
+- Add versioned golden files under `scenarios/goldens/`:
+  - `similar_books_smoke_v1.json` (PR-gating set)
+  - `similar_books_perf_v1.json` (optional larger nightly set)
+  - optional per-slice sets if a slice requires explicit balancing
+- Golden file contract (minimum):
+  - `golden_id`, `version`, `scenario_id`, `dataset_id`, `seed`, `created_at`
+  - `anchors` list with stable order and optional metadata (`language`, `popularity_bucket`, `genre`)
+- Enforce immutability for a given version:
+  - no in-place edits after promotion
+  - updates require a new version file and changelog note
+- Add refresh policy:
+  - event-driven refresh only (catalog shift, known staleness, schema changes)
+  - periodic check cadence, but refresh remains explicit and versioned
 
 **D4.2 Slice framework**
 
-- Define slices in `slices.yaml`:
-  - head/torso/tail
-  - language/genre
-  - series vs standalone
-  - cold-start proxies
-- Evaluator outputs metrics per slice by default.
-- Report highlights top regressed slice(s) and top regressed anchors within slice.
+- Define `scenarios/slices.yaml` as the single slice contract for evaluator + scenarios.
+- Slice spec includes:
+  - `slice_id`, `description`, `priority`, `membership_rule`
+  - rule types: `field_equals`, `field_in`, `numeric_range`, `explicit_anchor_ids`
+  - optional `min_sample_size` for gate eligibility
+- Required initial slices for Similar Books:
+  - `pop_head`, `pop_torso`, `pop_tail`
+  - `language_en`, `language_non_en` (or top supported langs)
+  - `series`, `standalone`
+- Evaluator behavior:
+  - compute core Stage 3 metrics per slice
+  - report sample size per slice
+  - skip hard-gating slices below `min_sample_size` and mark as informational
+- Report behavior:
+  - show top regressed eligible slices
+  - include top regressed anchors per failing slice for triage
 
 **D4.3 Paired arms**
 
-- Execute both baseline and candidate arms within the same run:
-  - same anchors, same environment, same timing window
-- Store arm attribution in artifacts and (if applicable) telemetry.
-- Evaluator computes paired deltas, and optionally paired bootstrap bounds.
+- Add paired execution mode for Stage 4 scenarios:
+  - run both `baseline` and `candidate` arms in one `run_id`
+  - same anchors, ordering, concurrency profile, and timing window
+- Arm contract in raw artifacts:
+  - each request record contains `arm`, `anchor_id`, `request_id`, `paired_key`
+  - `paired_key` links baseline/candidate evaluations for the same anchor/step
+- Arm routing options (implementation choice, same evaluator contract):
+  - feature flag switch
+  - model/index identifier override
+  - endpoint parameterization
+- Evaluator computes:
+  - per-anchor paired deltas
+  - aggregate paired deltas overall and per slice
+  - optional paired bootstrap confidence intervals for latency deltas
+
+**D4.4 Statistical policy and gates**
+
+- Define gate semantics for low-noise comparisons:
+  - hard gate correctness regressions at overall and slice level (eligible slices only)
+  - hard gate latency on paired p95 delta thresholds (absolute and/or relative)
+  - soft gate low-volume slices and confidence-interval overlap cases
+- Add explicit "insufficient evidence" state:
+  - if sample size or run quality is insufficient, fail closed for correctness and warn for latency
+- Persist gate decisions and evidence in `summary/deltas.json`:
+  - include per-metric decision, threshold, sample size, confidence metadata (if used)
 
 ### Acceptance criteria / exit criteria
 
 - Metrics variance for the golden set is demonstrably lower than non-golden sampling.
 - Slice regressions can be detected and reproduced from artifacts alone.
 - Paired deltas are stable across repeated runs.
+- Gate outcomes are explainable from report + `deltas.json` without ad-hoc log analysis.
+
+### Operational rollout plan
+
+1. Golden-only mode:
+   - switch PR evaluation from sampled anchors to golden anchors
+   - keep Stage 3 overall gates unchanged
+2. Slice-observe mode:
+   - compute and report slice metrics, no slice hard gates yet
+   - tune `min_sample_size` and slice definitions based on two weeks of runs
+3. Paired-enforced mode:
+   - enable paired arms for PR scenario
+   - move eligible slice correctness and paired latency deltas into hard gates
+4. Confidence-aware mode (optional):
+   - add bootstrap bounds in report and soften low-confidence latency deltas
 
 ### Implementation checklist
 
-- [ ] golden dataset selection criteria + ownership
-- [ ] slice definition format and evaluator integration
-- [ ] arm execution mechanism (feature flag / param / model id)
-- [ ] paired delta computation
+- [ ] `scenarios/goldens/*.json` contract + loader + validation
+- [ ] `scenarios/slices.yaml` schema + parser + unit tests
+- [ ] evaluator per-slice aggregation with `min_sample_size` handling
+- [ ] paired arm execution path in loadgen/orchestrator
+- [ ] paired delta computation in evaluator + report sections
+- [ ] `deltas.json` gate-evidence fields for slice and paired decisions
+- [ ] Stage 4 CI mode switch and documentation updates
 
 ### Risks and mitigations
 
@@ -398,6 +453,10 @@ Soft gates (warn only):
   - *Mitigation:* periodic explicit refresh cadence with versioning; add supplemental nightlies.
 - **Risk:** paired mode doubles load.
   - *Mitigation:* keep PR gating small; use paired only for goldens.
+- **Risk:** slice definitions drift from real catalog semantics.
+  - *Mitigation:* central `slices.yaml`, ownership assignment, and periodic validation against dataset snapshots.
+- **Risk:** low sample slices produce noisy gate failures.
+  - *Mitigation:* enforce `min_sample_size`, use soft gates for low-evidence slices, and surface confidence metadata.
 
 ## Stage 5: Performance scenario hardening
 

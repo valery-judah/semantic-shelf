@@ -1,10 +1,57 @@
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 from eval.parsers.requests_parser import iter_request_records
-from eval.schemas.raw import LoadgenResults, ValidationFailure
+from eval.schemas.raw import LoadgenResults, RequestRecord, ValidationFailure
 from eval.schemas.run import RunMetadata
 from eval.schemas.summary import EvaluationCounts, LatencyMetrics, RunSummary
+
+
+def compute_metrics_from_records(
+    records: list[RequestRecord],
+) -> tuple[EvaluationCounts, LatencyMetrics]:
+    total_requests = len(records)
+    passed_requests = sum(1 for r in records if r.passed)
+    failed_requests = total_requests - passed_requests
+
+    status_code_distribution: dict[str, int] = defaultdict(int)
+    failure_types: dict[str, int] = defaultdict(int)
+    latencies: list[float] = []
+
+    for r in records:
+        if r.status_code is not None:
+            status_code_distribution[str(r.status_code)] += 1
+        if not r.passed and r.failure_type:
+            failure_types[r.failure_type] += 1
+        latencies.append(r.latency_ms)
+
+    latencies.sort()
+
+    def calc_percentile(p: float) -> float | None:
+        if not latencies:
+            return None
+        idx = int((p / 100.0) * (len(latencies) - 1))
+        return round(latencies[idx], 2)
+
+    counts = EvaluationCounts(
+        total_requests=total_requests,
+        successful_requests=passed_requests,
+        failed_requests=failed_requests,
+        error_rate=(failed_requests / total_requests) if total_requests > 0 else 0.0,
+        timeouts=failure_types.get("timeout", 0),
+        correctness_failures=failed_requests,
+        failures_by_type=dict(failure_types),
+        status_code_distribution=dict(status_code_distribution),
+    )
+
+    latency = LatencyMetrics(
+        p50_ms=calc_percentile(50),
+        p95_ms=calc_percentile(95),
+        p99_ms=calc_percentile(99),
+    )
+
+    return counts, latency
 
 
 def build_summary(
@@ -62,3 +109,24 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
 
     sorted_anchors = sorted(anchor_max_latency.items(), key=lambda item: (-item[1], item[0]))
     return sorted_anchors[:n]
+
+
+def compute_paired_deltas(requests: list[RequestRecord]) -> list[dict[str, Any]]:
+    pairs = defaultdict(dict)
+    for r in requests:
+        if r.paired_key and r.arm:
+            pairs[r.paired_key][r.arm] = r
+
+    paired_deltas = []
+    for key, pair in pairs.items():
+        if "baseline" in pair and "candidate" in pair:
+            base = pair["baseline"]
+            cand = pair["candidate"]
+            paired_deltas.append({
+                "anchor_id": base.anchor_id,
+                "latency_delta_ms": cand.latency_ms - base.latency_ms,
+                "passed_delta": int(cand.passed) - int(base.passed),
+                "baseline_latency": base.latency_ms,
+                "candidate_latency": cand.latency_ms
+            })
+    return paired_deltas

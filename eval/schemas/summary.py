@@ -34,6 +34,15 @@ class LatencyMetrics(BaseModel):
     )
 
 
+class SliceMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    
+    slice_id: str
+    sample_size: int
+    counts: EvaluationCounts
+    latency: LatencyMetrics
+
+
 class RunSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -46,4 +55,7 @@ class RunSummary(BaseModel):
     )
     latency: LatencyMetrics = Field(
         default_factory=LatencyMetrics, description="Latency metrics for the run."
+    )
+    slices: list[SliceMetrics] = Field(
+        default_factory=list, description="Metrics breakdown by slice."
     )

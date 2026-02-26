@@ -1,0 +1,15 @@
+scenario_id: "similar_books_paired"
+scenario_version: "1.0"
+schema_version: "1.0.0"
+paired_arms: true
+traffic:
+  concurrency: 2
+  request_count: 10
+anchors:
+  anchor_count: 5
+validations:
+  status_code: 200
+  response_has_keys:
+    - "similar_book_ids"
+  no_duplicates: true
+  anchor_not_in_results: true

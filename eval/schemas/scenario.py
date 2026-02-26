@@ -37,6 +37,7 @@ class ScenarioConfig(BaseModel):
     traffic: TrafficConfig
     anchors: AnchorConfig
     validations: ValidationConfig
+    paired_arms: bool = Field(False, description="Enable paired baseline/candidate execution")
 
     @classmethod
     def load_from_yaml(cls, path: str) -> "ScenarioConfig":

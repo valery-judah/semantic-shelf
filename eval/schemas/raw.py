@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -12,6 +13,7 @@ class AnchorSelection(BaseModel):
     dataset_id: str = Field(..., min_length=1)
     seed: int = Field(..., ge=0)
     anchors: list[str] = Field(default_factory=list)
+    anchor_metadata: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class RequestRecord(BaseModel):
@@ -22,6 +24,8 @@ class RequestRecord(BaseModel):
     request_id: str = Field(..., min_length=1)
     scenario_id: str = Field(..., min_length=1)
     anchor_id: str = Field(..., min_length=1)
+    arm: str | None = Field(None, description="Experiment arm: 'baseline' or 'candidate'")
+    paired_key: str | None = Field(None, description="Stable key for linking paired requests")
     method: str | None = Field(
         None,
         min_length=1,

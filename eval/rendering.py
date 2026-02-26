@@ -20,6 +20,7 @@ def generate_report(
     top_failures: list[tuple[str, int]],
     worst_latency: list[tuple[str, float]],
     debug_files: list[str],
+    deltas: dict | None = None,
 ) -> str:
     lines: list[str] = []
     lines.append(f"# Evaluation Report: {run_meta.scenario_id}")
@@ -68,7 +69,7 @@ def generate_report(
     lines.append("|--------|-------|")
 
     def fmt_lat(val: float | None) -> str:
-        return f"{val} ms" if val is not None else "N/A"
+        return f"{val:.1f} ms" if val is not None else "N/A"
 
     lines.append(f"| P50 | {fmt_lat(summary.latency.p50_ms)} |")
     lines.append(f"| P95 | {fmt_lat(summary.latency.p95_ms)} |")
@@ -82,8 +83,44 @@ def generate_report(
         sample_link = f"`{samples[0]}`" if samples else "N/A"
         lines.append(f"| `{anchor_id}` | {latency_ms:.1f} | {sample_link} |")
 
+    if summary.slices:
+        lines.append("")
+        lines.append("## 5. Slice Metrics")
+        lines.append("| Slice ID | Count | Correctness | P50 | P95 | P99 |")
+        lines.append("|----------|-------|-------------|-----|-----|-----|")
+        for s in summary.slices:
+            status = "✅" if s.counts.failed_requests == 0 else f"❌ ({s.counts.failed_requests})"
+            lines.append(
+                f"| `{s.slice_id}` | {s.sample_size} | {status} | "
+                f"{fmt_lat(s.latency.p50_ms)} | {fmt_lat(s.latency.p95_ms)} | {fmt_lat(s.latency.p99_ms)} |"
+            )
+
+    if deltas:
+        lines.append("")
+        lines.append("## 6. Paired Analysis")
+        stats = deltas.get("stats", {})
+        lines.append(f"- **Paired Count:** {stats.get('count', 0)}")
+        lines.append(f"- **Avg Latency Delta:** {stats.get('avg_latency_delta_ms', 0.0):.2f} ms")
+        
+        # Simple distribution of deltas
+        pd_list = deltas.get("paired_deltas", [])
+        if pd_list:
+            lat_deltas = [d["latency_delta_ms"] for d in pd_list]
+            lines.append(f"- **Min Delta:** {min(lat_deltas):.2f} ms")
+            lines.append(f"- **Max Delta:** {max(lat_deltas):.2f} ms")
+            
+            # Top regressions
+            regressions = sorted([d for d in pd_list if d["latency_delta_ms"] > 0], key=lambda x: x["latency_delta_ms"], reverse=True)[:5]
+            if regressions:
+                lines.append("")
+                lines.append("### Top Latency Regressions (Candidate - Baseline)")
+                lines.append("| Anchor ID | Delta (ms) | Baseline | Candidate |")
+                lines.append("|-----------|------------|----------|-----------|")
+                for r in regressions:
+                    lines.append(f"| `{r['anchor_id']}` | +{r['latency_delta_ms']:.1f} | {r['baseline_latency']:.1f} | {r['candidate_latency']:.1f} |")
+
     lines.append("")
-    lines.append("## 5. Artifacts")
+    lines.append("## 7. Artifacts")
     lines.append("- `run.json`")
     lines.append("- `summary/summary.json`")
     lines.append("- `raw/anchors.json`")

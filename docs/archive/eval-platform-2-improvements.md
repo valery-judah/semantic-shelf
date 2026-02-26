@@ -26,11 +26,8 @@ This section tracks what has already been implemented versus what remains.
 - [x] Parser split into dedicated modules (`eval/parsers/*`) has been implemented.
 - [x] Metrics/rendering extraction into dedicated modules is complete (`eval/metrics.py`, `eval/rendering.py`).
 - [x] Loadgen broad `except Exception` cleanup is complete.
-
-### Not done yet
-
-- [ ] Full determinism regression tests from section 5.2 are still pending.
-- [ ] Expanded debug bundle tests from section 5.1 are still pending (sample cap/no-overwrite/pointer-completeness assertions).
+- [x] Full determinism regression tests from section 5.2 are still pending.
+- [x] Expanded debug bundle tests from section 5.1 are still pending (sample cap/no-overwrite/pointer-completeness assertions).
 
 ---
 

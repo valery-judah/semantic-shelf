@@ -25,6 +25,8 @@ async def execute_request(
     anchor_id: str,
     run_id: str,
     scenario_config: ScenarioConfig,
+    arm: str | None = None,
+    paired_key: str | None = None,
 ) -> tuple[RequestRecord, ValidationFailure | None]:
     request_id = f"req-{uuid.uuid4().hex[:8]}"
     url = f"{api_url}/books/{anchor_id}/similar"
@@ -32,6 +34,8 @@ async def execute_request(
         "X-Eval-Run-Id": run_id,
         "X-Request-Id": request_id,
     }
+    if arm:
+        headers["X-Eval-Arm"] = arm
 
     start_time = time.perf_counter()
     try:
@@ -102,6 +106,8 @@ async def execute_request(
             failure_type=failure_type,
             response_body=response_body,
             timestamp=datetime.now(UTC).isoformat(),
+            arm=arm,
+            paired_key=paired_key,
         )
 
         return result, failure
@@ -122,6 +128,8 @@ async def execute_request(
                 failure_type="timeout",
                 response_body=None,
                 timestamp=timestamp,
+                arm=arm,
+                paired_key=paired_key,
             ),
             ValidationFailure(
                 request_id=request_id,
@@ -149,6 +157,8 @@ async def execute_request(
                 failure_type="connection_error",
                 response_body=None,
                 timestamp=timestamp,
+                arm=arm,
+                paired_key=paired_key,
             ),
             ValidationFailure(
                 request_id=request_id,
@@ -205,19 +215,65 @@ async def run_load(
                 next_anchor_idx += 1
                 anchor_id = anchors[current_idx % len(anchors)]
 
-                res, fail = await execute_request(
-                    client, api_url, anchor_id, run_id, scenario_config
-                )
-
-                # Append results
-                record = res if isinstance(res, RequestRecord) else RequestRecord(**res)
-                results.append(record)
-
-                if fail:
-                    failure = (
-                        fail if isinstance(fail, ValidationFailure) else ValidationFailure(**fail)
+                if scenario_config.paired_arms:
+                    paired_key = uuid.uuid4().hex
+                    # Baseline
+                    res_b, fail_b = await execute_request(
+                        client,
+                        api_url,
+                        anchor_id,
+                        run_id,
+                        scenario_config,
+                        arm="baseline",
+                        paired_key=paired_key,
                     )
-                    failures.append(failure)
+                    results.append(
+                        res_b
+                        if isinstance(res_b, RequestRecord)
+                        else RequestRecord(**res_b)
+                    )
+                    if fail_b:
+                        failures.append(
+                            fail_b
+                            if isinstance(fail_b, ValidationFailure)
+                            else ValidationFailure(**fail_b)
+                        )
+
+                    # Candidate
+                    res_c, fail_c = await execute_request(
+                        client,
+                        api_url,
+                        anchor_id,
+                        run_id,
+                        scenario_config,
+                        arm="candidate",
+                        paired_key=paired_key,
+                    )
+                    results.append(
+                        res_c
+                        if isinstance(res_c, RequestRecord)
+                        else RequestRecord(**res_c)
+                    )
+                    if fail_c:
+                        failures.append(
+                            fail_c
+                            if isinstance(fail_c, ValidationFailure)
+                            else ValidationFailure(**fail_c)
+                        )
+                else:
+                    res, fail = await execute_request(
+                        client, api_url, anchor_id, run_id, scenario_config
+                    )
+
+                    # Append results
+                    record = res if isinstance(res, RequestRecord) else RequestRecord(**res)
+                    results.append(record)
+
+                    if fail:
+                        failure = (
+                            fail if isinstance(fail, ValidationFailure) else ValidationFailure(**fail)
+                        )
+                        failures.append(failure)
 
     # Start workers
     workers = []

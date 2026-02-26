@@ -122,7 +122,7 @@ def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
     assert "- **Traffic Mode:** `request_count=2`" in report_content
     assert "## 3. Correctness" in report_content
     assert "## 4. Performance" in report_content
-    assert "## 5. Artifacts" in report_content
+    assert "## 7. Artifacts" in report_content
     assert "## 6. How to reproduce" in report_content
     assert f"uv run python eval/evaluator.py --run-id {run_id}" in report_content
 
@@ -149,6 +149,74 @@ def test_find_worst_latency_anchors_rejects_legacy_rows(tmp_path: Path) -> None:
         assert "Unsupported requests.jsonl schema_version on line 1" in str(exc)
     else:
         raise AssertionError("Expected ValueError for legacy requests row schema version")
+
+
+def test_paired_mode_gate_ignores_baseline_only_failures() -> None:
+    requests = [
+        evaluator.RequestRecord(
+            requests_schema_version="1.0",
+            run_id="run_paired",
+            request_id="req-1",
+            scenario_id="similar_books_smoke",
+            anchor_id="1",
+            arm="baseline",
+            paired_key="k1",
+            status_code=500,
+            latency_ms=10.0,
+            passed=False,
+            failure_type="status_code_mismatch",
+            timestamp="2026-02-26T00:00:00+00:00",
+        ),
+        evaluator.RequestRecord(
+            requests_schema_version="1.0",
+            run_id="run_paired",
+            request_id="req-2",
+            scenario_id="similar_books_smoke",
+            anchor_id="1",
+            arm="candidate",
+            paired_key="k1",
+            status_code=200,
+            latency_ms=9.0,
+            passed=True,
+            timestamp="2026-02-26T00:00:01+00:00",
+        ),
+    ]
+
+    assert evaluator._paired_mode_gate_failure_count(requests) == 0
+
+
+def test_paired_mode_gate_fails_only_on_candidate_regression() -> None:
+    requests = [
+        evaluator.RequestRecord(
+            requests_schema_version="1.0",
+            run_id="run_paired",
+            request_id="req-1",
+            scenario_id="similar_books_smoke",
+            anchor_id="1",
+            arm="baseline",
+            paired_key="k1",
+            status_code=200,
+            latency_ms=10.0,
+            passed=True,
+            timestamp="2026-02-26T00:00:00+00:00",
+        ),
+        evaluator.RequestRecord(
+            requests_schema_version="1.0",
+            run_id="run_paired",
+            request_id="req-2",
+            scenario_id="similar_books_smoke",
+            anchor_id="1",
+            arm="candidate",
+            paired_key="k1",
+            status_code=500,
+            latency_ms=11.0,
+            passed=False,
+            failure_type="status_code_mismatch",
+            timestamp="2026-02-26T00:00:01+00:00",
+        ),
+    ]
+
+    assert evaluator._paired_mode_gate_failure_count(requests) == 1
 
 
 def test_get_top_failing_anchors_is_deterministic_for_ties() -> None:
