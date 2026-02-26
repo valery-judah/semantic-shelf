@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import os
 import sys
@@ -8,13 +7,25 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from eval.metrics import build_summary as _build_summary
+from eval.metrics import find_worst_latency_anchors as _find_worst_latency_anchors
+from eval.metrics import get_top_failing_anchors as _get_top_failing_anchors
 from eval.parsers import (
     iter_request_records,
-    load_anchors,
-    load_loadgen_results,
-    load_run_metadata,
-    load_validation_failures,
 )
+from eval.parsers import (
+    load_anchors as _load_anchors,
+)
+from eval.parsers import (
+    load_loadgen_results as _load_loadgen_results,
+)
+from eval.parsers import (
+    load_run_metadata as _load_run_metadata,
+)
+from eval.parsers import (
+    load_validation_failures as _load_validation_failures,
+)
+from eval.rendering import generate_report as _generate_report
 from eval.schemas.raw import (
     AnchorSelection,
     DebugRequestSample,
@@ -23,7 +34,7 @@ from eval.schemas.raw import (
 )
 from eval.schemas.run import RunMetadata
 from eval.schemas.scenario import ScenarioConfig
-from eval.schemas.summary import EvaluationCounts, LatencyMetrics, RunSummary
+from eval.schemas.summary import RunSummary
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -38,74 +49,45 @@ def load_scenario_config(repo_root: Path, scenario_id: str) -> ScenarioConfig | 
     return ScenarioConfig.load_from_yaml(str(scenario_path))
 
 
+def load_run_metadata(base_dir: Path) -> RunMetadata:
+    return _load_run_metadata(base_dir)
+
+
+def load_anchors(raw_dir: Path) -> AnchorSelection:
+    return _load_anchors(raw_dir)
+
+
+def load_validation_failures(raw_dir: Path) -> list[ValidationFailure]:
+    return _load_validation_failures(raw_dir)
+
+
+def load_loadgen_results(raw_dir: Path) -> LoadgenResults:
+    return _load_loadgen_results(raw_dir)
+
+
 def build_summary(
     run_meta: RunMetadata, loadgen_results: LoadgenResults, failures: list[ValidationFailure]
 ) -> RunSummary:
-    total_requests = loadgen_results.total_requests
-    passed_requests = loadgen_results.passed_requests
-    failed_requests = loadgen_results.failed_requests
-    status_code_distribution = loadgen_results.status_code_distribution
-
-    failure_types: dict[str, int] = {}
-    for failure in failures:
-        failure_types[failure.failure_type] = failure_types.get(failure.failure_type, 0) + 1
-
-    latency_data = loadgen_results.latency_ms
-
-    return RunSummary(
-        run_id=run_meta.run_id,
-        summary_schema_version="1.0.0",
-        counts=EvaluationCounts(
-            total_requests=total_requests,
-            successful_requests=passed_requests,
-            failed_requests=failed_requests,
-            error_rate=(failed_requests / total_requests) if total_requests > 0 else 0.0,
-            timeouts=failure_types.get("timeout", 0),
-            correctness_failures=failed_requests,
-            failures_by_type=failure_types,
-            status_code_distribution=status_code_distribution,
-        ),
-        latency=LatencyMetrics(
-            p50_ms=latency_data.p50,
-            p95_ms=latency_data.p95,
-            p99_ms=latency_data.p99,
-        ),
-    )
+    return _build_summary(run_meta, loadgen_results, failures)
 
 
 def get_top_failing_anchors(failures: list[ValidationFailure], n: int = 5) -> list[tuple[str, int]]:
-    anchor_counts: dict[str, int] = defaultdict(int)
-    for failure in failures:
-        anchor_counts[failure.anchor_id] += 1
-    sorted_anchors = sorted(anchor_counts.items(), key=lambda item: (-item[1], item[0]))
-    return sorted_anchors[:n]
+    return _get_top_failing_anchors(failures, n=n)
 
 
 def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[str, float]]:
-    if not requests_path.exists():
-        return []
-
-    anchor_max_latency: dict[str, float] = defaultdict(float)
-
-    for _, request in iter_request_records(requests_path):
-        if request.latency_ms > anchor_max_latency[request.anchor_id]:
-            anchor_max_latency[request.anchor_id] = request.latency_ms
-
-    sorted_anchors = sorted(anchor_max_latency.items(), key=lambda item: (-item[1], item[0]))
-    return sorted_anchors[:n]
+    return _find_worst_latency_anchors(requests_path, n=n)
 
 
 def extract_debug_bundles(
     requests_path: Path, base_dir: Path, target_anchors: set[str], limit_per_anchor: int = 10
 ) -> list[str]:
-    """Writes debug files for specified anchors with a limit per anchor."""
     if not requests_path.exists():
         return []
 
     sample_dir = base_dir / "raw" / "sample_requests"
     written_files: list[str] = []
     target_anchor_ids = set(target_anchors)
-
     anchor_counts: dict[str, int] = defaultdict(int)
 
     for line_no, request in iter_request_records(requests_path):
@@ -161,87 +143,15 @@ def generate_report(
     worst_latency: list[tuple[str, float]],
     debug_files: list[str],
 ) -> str:
-    lines: list[str] = []
-    lines.append(f"# Evaluation Report: {run_meta.scenario_id}")
-    lines.append("")
-
-    lines.append("## 1. Run Metadata Summary")
-    lines.append(f"- **Run ID:** `{run_meta.run_id}`")
-    lines.append(f"- **Date:** {run_meta.created_at}")
-    lines.append(f"- **Scenario ID:** `{run_meta.scenario_id}`")
-    lines.append(f"- **Dataset ID:** `{run_meta.dataset_id}`")
-    lines.append(f"- **Seed:** `{run_meta.seed}`")
-    lines.append("")
-
-    lines.append("## 2. Scenario Summary")
-    lines.append(f"- **Total Anchors:** {len(anchors.anchors)}")
-    lines.append(f"- **Configured Anchor Count:** {run_meta.anchor_count}")
-    concurrency = scenario_config.traffic.concurrency if scenario_config is not None else "N/A"
-    lines.append(f"- **Concurrency:** {concurrency}")
-    lines.append(f"- **Traffic Mode:** `{_scenario_mode(scenario_config)}`")
-    lines.append("")
-
-    lines.append("## 3. Correctness")
-    if summary.counts.failed_requests == 0:
-        lines.append("✅ **PASS**: No validation failures.")
-    else:
-        lines.append(f"❌ **FAIL**: {summary.counts.failed_requests} failures found.")
-        lines.append("")
-        lines.append("### Failure Breakdown")
-        for failure_type, count in sorted(
-            summary.counts.failures_by_type.items(), key=lambda item: (-item[1], item[0])
-        ):
-            lines.append(f"- `{failure_type}`: {count}")
-
-        lines.append("")
-        lines.append("### Top Failing Anchors")
-        lines.append("| Anchor ID | Failure Count | Debug Samples |")
-        lines.append("|-----------|---------------|---------------|")
-        for anchor_id, count in top_failures:
-            samples = [path for path in debug_files if f"/{anchor_id}/" in path]
-            sample_link = f"`{samples[0]}`" if samples else "N/A"
-            lines.append(f"| `{anchor_id}` | {count} | {sample_link} |")
-
-    lines.append("")
-    lines.append("## 4. Performance")
-    lines.append("| Metric | Value |")
-    lines.append("|--------|-------|")
-
-    def fmt_lat(val: float | None) -> str:
-        return f"{val} ms" if val is not None else "N/A"
-
-    lines.append(f"| P50 | {fmt_lat(summary.latency.p50_ms)} |")
-    lines.append(f"| P95 | {fmt_lat(summary.latency.p95_ms)} |")
-    lines.append(f"| P99 | {fmt_lat(summary.latency.p99_ms)} |")
-    lines.append("")
-    lines.append("### Worst Latency Anchors (Max Latency)")
-    lines.append("| Anchor ID | Max Latency (ms) | Debug Samples |")
-    lines.append("|-----------|------------------|---------------|")
-    for anchor_id, latency_ms in worst_latency:
-        samples = [path for path in debug_files if f"/{anchor_id}/" in path]
-        sample_link = f"`{samples[0]}`" if samples else "N/A"
-        lines.append(f"| `{anchor_id}` | {latency_ms:.1f} | {sample_link} |")
-
-    lines.append("")
-    lines.append("## 5. Artifacts")
-    lines.append("- `run.json`")
-    lines.append("- `summary/summary.json`")
-    lines.append("- `raw/anchors.json`")
-    lines.append("- `raw/loadgen_results.json`")
-    lines.append("- `raw/validation_failures.jsonl`")
-    lines.append("- `raw/requests.jsonl`")
-    if debug_files:
-        lines.append("- `raw/sample_requests/...`")
-
-    lines.append("")
-    lines.append("## 6. How to reproduce")
-    lines.append(f"- `uv run python eval/evaluator.py --run-id {run_meta.run_id}`")
-    lines.append(
-        "- `uv run python eval/compare.py --scenario "
-        f"{run_meta.scenario_id} --run-id {run_meta.run_id}` (if baseline exists)"
+    return _generate_report(
+        run_meta=run_meta,
+        scenario_config=scenario_config,
+        anchors=anchors,
+        summary=summary,
+        top_failures=top_failures,
+        worst_latency=worst_latency,
+        debug_files=debug_files,
     )
-
-    return "\n".join(lines)
 
 
 def main() -> None:
@@ -304,7 +214,7 @@ def main() -> None:
             logger.error(f"Gate Failed: Found {total_failed} correctness failures.")
             sys.exit(1)
 
-    except (FileNotFoundError, ValidationError, ValueError, json.JSONDecodeError) as exc:
+    except (FileNotFoundError, ValidationError, ValueError) as exc:
         logger.error("Evaluator failed: %s", exc)
         sys.exit(1)
 
