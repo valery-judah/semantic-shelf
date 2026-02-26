@@ -99,3 +99,9 @@ TelemetryEvent = Annotated[
 
 class EventBatchRequest(BaseModel):
     events: list[TelemetryEvent] = Field(description="A batch of telemetry events to ingest")
+
+
+class EventBatchResponse(BaseModel):
+    status: Literal["accepted"] = "accepted"
+    inserted_count: int = Field(description="Number of newly inserted events")
+    duplicate_count: int = Field(description="Number of events ignored as duplicates")
