@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -11,22 +11,15 @@ from pydantic import ValidationError
 from eval.schemas.raw import (
     AnchorSelection,
     LoadgenResults,
+    RequestRecord,
     ValidationFailure,
 )
 from eval.schemas.run import RunMetadata
+from eval.schemas.scenario import ScenarioConfig
 from eval.schemas.summary import EvaluationCounts, LatencyMetrics, RunSummary
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-
-def percentile(values: list[float], p: float) -> float | None:
-    if not values:
-        return None
-
-    sorted_values = sorted(values)
-    rank = int(round((len(sorted_values) - 1) * p))
-    return sorted_values[rank]
 
 
 def load_run_metadata(base_dir: Path) -> RunMetadata:
@@ -35,6 +28,13 @@ def load_run_metadata(base_dir: Path) -> RunMetadata:
         raise FileNotFoundError(f"Could not find run metadata at {run_json_path}")
     run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
     return RunMetadata(**run_data)
+
+
+def load_scenario_config(repo_root: Path, scenario_id: str) -> ScenarioConfig | None:
+    scenario_path = repo_root / "scenarios" / f"{scenario_id}.yaml"
+    if not scenario_path.exists():
+        return None
+    return ScenarioConfig.load_from_yaml(str(scenario_path))
 
 
 def load_anchors(raw_dir: Path) -> AnchorSelection:
@@ -88,10 +88,9 @@ def build_summary(
     failed_requests = loadgen_results.failed_requests
     status_code_distribution = loadgen_results.status_code_distribution
 
-    failure_types = {}
-    for f in failures:
-        ftype = f.failure_type
-        failure_types[ftype] = failure_types.get(ftype, 0) + 1
+    failure_types: dict[str, int] = {}
+    for failure in failures:
+        failure_types[failure.failure_type] = failure_types.get(failure.failure_type, 0) + 1
 
     latency_data = loadgen_results.latency_ms
 
@@ -117,15 +116,18 @@ def build_summary(
 
 
 def get_top_failing_anchors(failures: list[ValidationFailure], n: int = 5) -> list[tuple[str, int]]:
-    anchor_counts = Counter(f.anchor_id for f in failures)
-    return anchor_counts.most_common(n)
+    anchor_counts: dict[str, int] = defaultdict(int)
+    for failure in failures:
+        anchor_counts[failure.anchor_id] += 1
+    sorted_anchors = sorted(anchor_counts.items(), key=lambda item: (-item[1], item[0]))
+    return sorted_anchors[:n]
 
 
 def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[str, float]]:
     if not requests_path.exists():
         return []
 
-    anchor_max_latency = defaultdict(float)
+    anchor_max_latency: dict[str, float] = defaultdict(float)
 
     with requests_path.open(encoding="utf-8") as f:
         for line in f:
@@ -133,19 +135,13 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
             if not stripped:
                 continue
             try:
-                # Optimized: parse only needed fields if possible, or just json.loads
-                # Using json.loads is fine for streaming
-                data = json.loads(stripped)
-                # We don't validate full schema here for speed, just access fields
-                aid = data.get("anchor_id")
-                lat = data.get("latency_ms")
-                if aid and lat is not None:
-                    if lat > anchor_max_latency[aid]:
-                        anchor_max_latency[aid] = lat
-            except (json.JSONDecodeError, ValueError):
+                request = RequestRecord(**json.loads(stripped))
+                if request.latency_ms > anchor_max_latency[request.anchor_id]:
+                    anchor_max_latency[request.anchor_id] = request.latency_ms
+            except (json.JSONDecodeError, ValidationError):
                 continue
 
-    sorted_anchors = sorted(anchor_max_latency.items(), key=lambda x: x[1], reverse=True)
+    sorted_anchors = sorted(anchor_max_latency.items(), key=lambda item: (-item[1], item[0]))
     return sorted_anchors[:n]
 
 
@@ -157,97 +153,103 @@ def extract_debug_bundles(
         return []
 
     sample_dir = base_dir / "raw" / "sample_requests"
-    written_files = []
+    written_files: list[str] = []
+    target_anchor_ids = set(target_anchors)
 
-    # Track counts per anchor to enforce limit
-    anchor_counts = defaultdict(int)
+    anchor_counts: dict[str, int] = defaultdict(int)
 
     with requests_path.open(encoding="utf-8") as f:
         for line in f:
-            # Check if we have collected enough for all targets
-            if not target_anchors:
+            if not target_anchor_ids:
                 break
 
             stripped = line.strip()
             if not stripped:
                 continue
             try:
-                data = json.loads(stripped)
-                aid = data.get("anchor_id")
-                rid = data.get("request_id")
+                request = RequestRecord(**json.loads(stripped))
+                anchor_id = request.anchor_id
+                if anchor_id in target_anchor_ids and anchor_counts[anchor_id] < limit_per_anchor:
+                    anchor_dir = sample_dir / anchor_id
+                    anchor_dir.mkdir(parents=True, exist_ok=True)
 
-                if aid in target_anchors:
-                    if anchor_counts[aid] < limit_per_anchor:
-                        anchor_dir = sample_dir / aid
-                        anchor_dir.mkdir(parents=True, exist_ok=True)
+                    file_path = anchor_dir / f"{request.request_id}.json"
+                    file_path.write_text(request.model_dump_json(indent=2), encoding="utf-8")
+                    written_files.append(str(file_path.relative_to(base_dir)))
 
-                        file_path = anchor_dir / f"{rid}.json"
-                        # Re-dump to ensure pretty print or just write raw?
-                        # User code used model_dump_json(indent=2).
-                        # We can just use json.dump
-                        file_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-                        written_files.append(str(file_path.relative_to(base_dir)))
-
-                        anchor_counts[aid] += 1
-
-                        # Optimization: if we filled this anchor, stop checking?
-                        # No, once we hit limit we are done for that anchor.
-                        if anchor_counts[aid] >= limit_per_anchor:
-                            target_anchors.remove(aid)
-            except (json.JSONDecodeError, ValueError):
+                    anchor_counts[anchor_id] += 1
+                    if anchor_counts[anchor_id] >= limit_per_anchor:
+                        target_anchor_ids.remove(anchor_id)
+            except (json.JSONDecodeError, ValidationError):
                 continue
 
-    return written_files
+    return sorted(written_files)
+
+
+def _scenario_mode(config: ScenarioConfig | None) -> str:
+    if config is None:
+        return "N/A"
+    if config.traffic.request_count is not None:
+        return f"request_count={config.traffic.request_count}"
+    return f"duration_seconds={config.traffic.duration_seconds}"
 
 
 def generate_report(
     run_meta: RunMetadata,
+    scenario_config: ScenarioConfig | None,
+    anchors: AnchorSelection,
     summary: RunSummary,
     top_failures: list[tuple[str, int]],
     worst_latency: list[tuple[str, float]],
     debug_files: list[str],
 ) -> str:
-    lines = []
+    lines: list[str] = []
     lines.append(f"# Evaluation Report: {run_meta.scenario_id}")
-    lines.append(f"**Run ID:** `{run_meta.run_id}`")
-    lines.append(f"**Date:** {run_meta.created_at}")
     lines.append("")
 
-    lines.append("## 1. Summary")
-    lines.append(f"- **Total Requests:** {summary.counts.total_requests}")
-    lines.append(f"- **Success Rate:** {100 * (1 - summary.counts.error_rate):.1f}%")
-
-    p95 = summary.latency.p95_ms
-    p95_str = f"{p95} ms" if p95 is not None else "N/A"
-    lines.append(f"- **P95 Latency:** {p95_str}")
+    lines.append("## 1. Run Metadata Summary")
+    lines.append(f"- **Run ID:** `{run_meta.run_id}`")
+    lines.append(f"- **Date:** {run_meta.created_at}")
+    lines.append(f"- **Scenario ID:** `{run_meta.scenario_id}`")
+    lines.append(f"- **Dataset ID:** `{run_meta.dataset_id}`")
+    lines.append(f"- **Seed:** `{run_meta.seed}`")
     lines.append("")
 
-    lines.append("## 2. Correctness")
+    lines.append("## 2. Scenario Summary")
+    lines.append(f"- **Total Anchors:** {len(anchors.anchors)}")
+    lines.append(f"- **Configured Anchor Count:** {run_meta.anchor_count}")
+    concurrency = scenario_config.traffic.concurrency if scenario_config is not None else "N/A"
+    lines.append(f"- **Concurrency:** {concurrency}")
+    lines.append(f"- **Traffic Mode:** `{_scenario_mode(scenario_config)}`")
+    lines.append("")
+
+    lines.append("## 3. Correctness")
     if summary.counts.failed_requests == 0:
         lines.append("✅ **PASS**: No validation failures.")
     else:
         lines.append(f"❌ **FAIL**: {summary.counts.failed_requests} failures found.")
         lines.append("")
         lines.append("### Failure Breakdown")
-        for ftype, count in summary.counts.failures_by_type.items():
-            lines.append(f"- `{ftype}`: {count}")
+        for failure_type, count in sorted(
+            summary.counts.failures_by_type.items(), key=lambda item: (-item[1], item[0])
+        ):
+            lines.append(f"- `{failure_type}`: {count}")
 
         lines.append("")
         lines.append("### Top Failing Anchors")
         lines.append("| Anchor ID | Failure Count | Debug Samples |")
         lines.append("|-----------|---------------|---------------|")
         for anchor_id, count in top_failures:
-            # Find a sample for this anchor
-            samples = [f for f in debug_files if f"/{anchor_id}/" in f]
+            samples = [path for path in debug_files if f"/{anchor_id}/" in path]
             sample_link = f"`{samples[0]}`" if samples else "N/A"
             lines.append(f"| `{anchor_id}` | {count} | {sample_link} |")
 
     lines.append("")
-    lines.append("## 3. Performance")
+    lines.append("## 4. Performance")
     lines.append("| Metric | Value |")
     lines.append("|--------|-------|")
 
-    def fmt_lat(val):
+    def fmt_lat(val: float | None) -> str:
         return f"{val} ms" if val is not None else "N/A"
 
     lines.append(f"| P50 | {fmt_lat(summary.latency.p50_ms)} |")
@@ -257,18 +259,21 @@ def generate_report(
     lines.append("### Worst Latency Anchors (Max Latency)")
     lines.append("| Anchor ID | Max Latency (ms) | Debug Samples |")
     lines.append("|-----------|------------------|---------------|")
-    for anchor_id, lat in worst_latency:
-        samples = [f for f in debug_files if f"/{anchor_id}/" in f]
+    for anchor_id, latency_ms in worst_latency:
+        samples = [path for path in debug_files if f"/{anchor_id}/" in path]
         sample_link = f"`{samples[0]}`" if samples else "N/A"
-        lines.append(f"| `{anchor_id}` | {lat:.1f} | {sample_link} |")
+        lines.append(f"| `{anchor_id}` | {latency_ms:.1f} | {sample_link} |")
 
     lines.append("")
-    lines.append("## 4. Artifacts")
+    lines.append("## 5. Artifacts")
     lines.append("- `run.json`")
     lines.append("- `summary/summary.json`")
+    lines.append("- `raw/anchors.json`")
     lines.append("- `raw/loadgen_results.json`")
     lines.append("- `raw/validation_failures.jsonl`")
     lines.append("- `raw/requests.jsonl`")
+    if debug_files:
+        lines.append("- `raw/sample_requests/...`")
 
     return "\n".join(lines)
 
@@ -278,7 +283,8 @@ def main() -> None:
     parser.add_argument("--run-id", required=True, help="Evaluation run ID to evaluate")
     args = parser.parse_args()
 
-    base_dir = Path(os.getcwd()) / "artifacts" / "eval" / args.run_id
+    repo_root = Path(os.getcwd())
+    base_dir = repo_root / "artifacts" / "eval" / args.run_id
     raw_dir = base_dir / "raw"
     summary_dir = base_dir / "summary"
     report_dir = base_dir / "report"
@@ -287,41 +293,46 @@ def main() -> None:
 
     try:
         run_meta = load_run_metadata(base_dir)
+        scenario_config = load_scenario_config(repo_root, run_meta.scenario_id)
+        if scenario_config is None:
+            logger.warning(
+                "Scenario config not found for %s; report will use N/A values.",
+                run_meta.scenario_id,
+            )
+        anchors = load_anchors(raw_dir)
         loadgen_results = load_loadgen_results(raw_dir)
         failures = load_validation_failures(raw_dir)
 
-        # We no longer load all requests into memory
         requests_path = raw_dir / "requests.jsonl"
 
         summary = build_summary(run_meta, loadgen_results, failures)
 
-        # Write Summary
         summary_json_path = summary_dir / "summary.json"
         summary_json_path.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
         logger.info("Wrote validated summary.json to %s", summary_json_path)
 
-        # Triage Primitives
         top_failures = get_top_failing_anchors(failures)
-
-        # Pass 1: Find worst latency anchors by streaming
         worst_latency = find_worst_latency_anchors(requests_path)
 
         anchors_to_debug = {a[0] for a in top_failures} | {a[0] for a in worst_latency}
 
-        # Pass 2: Extract debug bundles with limit
         debug_files = extract_debug_bundles(
             requests_path, base_dir, anchors_to_debug, limit_per_anchor=10
         )
 
-        # Generate Report
         report_content = generate_report(
-            run_meta, summary, top_failures, worst_latency, debug_files
+            run_meta,
+            scenario_config,
+            anchors,
+            summary,
+            top_failures,
+            worst_latency,
+            debug_files,
         )
         report_path = report_dir / "report.md"
         report_path.write_text(report_content, encoding="utf-8")
         logger.info("Wrote report.md to %s", report_path)
 
-        # Enforce Gate
         total_failed = summary.counts.failed_requests
         if total_failed > 0:
             logger.error(f"Gate Failed: Found {total_failed} correctness failures.")
