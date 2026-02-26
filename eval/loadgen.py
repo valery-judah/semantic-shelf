@@ -8,6 +8,7 @@ import uuid
 from datetime import UTC, datetime
 
 import httpx
+import yaml
 from pydantic import ValidationError
 
 from eval.schemas.raw import AnchorSelection, LoadgenResults, RequestRecord, ValidationFailure
@@ -76,7 +77,7 @@ async def execute_request(
             try:
                 # Capture truncated response body for debugging
                 response_body = response.text[:1000]
-            except Exception:
+            except (httpx.ResponseNotRead, UnicodeDecodeError):
                 response_body = "<could not read response text>"
 
             failure = ValidationFailure(
@@ -132,7 +133,7 @@ async def execute_request(
                 timestamp=timestamp,
             ),
         )
-    except Exception as e:
+    except httpx.RequestError as e:
         latency_ms = (time.perf_counter() - start_time) * 1000
         timestamp = datetime.now(UTC).isoformat()
         return (
@@ -305,7 +306,7 @@ def main():
 
     try:
         scenario_config = ScenarioConfig.load_from_yaml(scenario_path)
-    except Exception as e:
+    except (OSError, yaml.YAMLError, ValidationError) as e:
         logger.error(f"Failed to load scenario config: {e}")
         sys.exit(1)
 
@@ -318,7 +319,7 @@ def main():
         try:
             anchor_selection = AnchorSelection(**json.load(f))
             anchors = anchor_selection.anchors
-        except Exception as e:
+        except (OSError, json.JSONDecodeError, ValidationError) as e:
             logger.error(f"Failed to load anchors: {e}")
             sys.exit(1)
 
