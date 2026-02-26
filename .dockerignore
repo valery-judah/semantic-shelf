@@ -12,3 +12,12 @@ htmlcov
 dist
 build
 *.egg-info
+
+# Exclude directories that aren't needed for the API container
+# and bloat the build context
+artifacts/
+docs/
+scenarios/
+docker/
+tests/
+eval/

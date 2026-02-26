@@ -39,7 +39,7 @@ echo "✅ OpenAPI spec generated successfully at docs/openapi.json (ready as a b
 
 echo ""
 echo "🐳 6. Building Docker Image..."
-make docker-build
+make build
 
 echo ""
 echo "========================================"

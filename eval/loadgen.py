@@ -202,11 +202,20 @@ async def run_load(
     p95 = calc_percentile(95)
     p99 = calc_percentile(99)
 
+    # Calculate status code distribution
+    status_codes = {}
+    for r in results:
+        code = r["status_code"]
+        if code is not None:
+            code_str = str(code)
+            status_codes[code_str] = status_codes.get(code_str, 0) + 1
+
     loadgen_results = {
         "schema_version": "1.0.0",
         "total_requests": len(results),
         "passed_requests": sum(1 for r in results if r["passed"]),
         "failed_requests": sum(1 for r in results if not r["passed"]),
+        "status_code_distribution": status_codes,
         "latency_ms": {
             "p50": p50,
             "p95": p95,

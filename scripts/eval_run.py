@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keep-alive", action="store_true")
     parser.add_argument("--dataset-id", default="local_dev")
     parser.add_argument("--anchor-count", type=int, default=6)
+    parser.add_argument("--no-build", action="store_true", help="Skip rebuilding Docker images")
     return parser.parse_args()
 
 
@@ -47,8 +48,11 @@ def wait_for_api() -> None:
     sys.exit(1)
 
 
-def start_environment() -> None:
-    run_command(["docker", "compose", "up", "-d", "--build"])
+def start_environment(build: bool = True) -> None:
+    cmd = ["docker", "compose", "up", "-d"]
+    if build:
+        cmd.append("--build")
+    run_command(cmd)
     wait_for_api()
 
 
@@ -97,7 +101,7 @@ def main() -> None:
 
     try:
         if args.env == "compose":
-            start_environment()
+            start_environment(build=not args.no_build)
 
         for scenario in args.scenarios:
             run = run_scenario(

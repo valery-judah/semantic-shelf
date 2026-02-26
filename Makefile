@@ -105,6 +105,10 @@ build: ## Build the docker images
 restart: ## Restart the docker containers
 	$(COMPOSE) restart
 
+.PHONY: verify-docker
+verify-docker: ## Run Docker Compose smoke verification
+	./verify_docker.sh
+
 # ==============================================================================
 # Database Operations
 # ==============================================================================
