@@ -11,6 +11,9 @@ from eval.schemas.summary import EvaluationCounts, LatencyMetrics, RunSummary
 def compute_metrics_from_records(
     records: list[RequestRecord],
 ) -> tuple[EvaluationCounts, LatencyMetrics]:
+    # Filter for steady-state records only
+    records = [r for r in records if getattr(r, "phase", "steady_state") == "steady_state"]
+
     total_requests = len(records)
     passed_requests = sum(1 for r in records if r.passed)
     failed_requests = total_requests - passed_requests
@@ -62,8 +65,13 @@ def build_summary(
     failed_requests = loadgen_results.failed_requests
     status_code_distribution = loadgen_results.status_code_distribution
 
+    # Filter failures to exclude warmup
+    steady_state_failures = [
+        f for f in failures if getattr(f, "phase", "steady_state") == "steady_state"
+    ]
+
     failure_types: dict[str, int] = {}
-    for failure in failures:
+    for failure in steady_state_failures:
         failure_types[failure.failure_type] = failure_types.get(failure.failure_type, 0) + 1
 
     latency_data = loadgen_results.latency_ms
@@ -92,7 +100,8 @@ def build_summary(
 def get_top_failing_anchors(failures: list[ValidationFailure], n: int = 5) -> list[tuple[str, int]]:
     anchor_counts: dict[str, int] = defaultdict(int)
     for failure in failures:
-        anchor_counts[failure.anchor_id] += 1
+        if getattr(failure, "phase", "steady_state") == "steady_state":
+            anchor_counts[failure.anchor_id] += 1
     sorted_anchors = sorted(anchor_counts.items(), key=lambda item: (-item[1], item[0]))
     return sorted_anchors[:n]
 
@@ -104,8 +113,9 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
     anchor_max_latency: dict[str, float] = defaultdict(float)
 
     for _, request in iter_request_records(requests_path):
-        if request.latency_ms > anchor_max_latency[request.anchor_id]:
-            anchor_max_latency[request.anchor_id] = request.latency_ms
+        if getattr(request, "phase", "steady_state") == "steady_state":
+            if request.latency_ms > anchor_max_latency[request.anchor_id]:
+                anchor_max_latency[request.anchor_id] = request.latency_ms
 
     sorted_anchors = sorted(anchor_max_latency.items(), key=lambda item: (-item[1], item[0]))
     return sorted_anchors[:n]
@@ -114,8 +124,9 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
 def compute_paired_deltas(requests: list[RequestRecord]) -> list[dict[str, Any]]:
     pairs = defaultdict(dict)
     for r in requests:
-        if r.paired_key and r.arm:
-            pairs[r.paired_key][r.arm] = r
+        if getattr(r, "phase", "steady_state") == "steady_state":
+            if r.paired_key and r.arm:
+                pairs[r.paired_key][r.arm] = r
 
     paired_deltas = []
     for _key, pair in pairs.items():

@@ -45,6 +45,10 @@ class RequestRecord(BaseModel):
     failure_type: str | None = Field(None, description="Type of validation failure if any.")
     response_body: str | None = Field(None, description="Truncated response body for debugging.")
     timestamp: datetime
+    phase: str | None = Field(
+        "steady_state",
+        description="Execution phase: 'warmup' or 'steady_state'. Defaults to 'steady_state' for backward compatibility.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -94,6 +98,10 @@ class ValidationFailure(BaseModel):
     error_detail: str | None = Field(None)
     latency_ms: float = Field(..., ge=0.0)
     timestamp: datetime
+    phase: str | None = Field(
+        "steady_state",
+        description="Execution phase: 'warmup' or 'steady_state'. Defaults to 'steady_state'.",
+    )
 
 
 class DebugRequestSample(BaseModel):

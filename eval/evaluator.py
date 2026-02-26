@@ -48,7 +48,12 @@ DEBUG_SCHEMA_VERSION = "1.0.0"
 
 def _paired_mode_gate_failure_count(requests: list[RequestRecord]) -> int | None:
     """Return correctness regressions for paired runs, or None for non-paired runs."""
-    paired_requests = [r for r in requests if r.arm in {"baseline", "candidate"}]
+    paired_requests = [
+        r
+        for r in requests
+        if r.arm in {"baseline", "candidate"}
+        and getattr(r, "phase", "steady_state") == "steady_state"
+    ]
     if not paired_requests:
         return None
 
@@ -114,6 +119,9 @@ def extract_debug_bundles(
     anchor_request_occurrences: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     for line_no, request in iter_request_records(requests_path):
+        if getattr(request, "phase", "steady_state") != "steady_state":
+            continue
+
         if not target_anchor_ids:
             break
 
@@ -209,7 +217,8 @@ def main() -> None:
         requests: list[RequestRecord] = []
         if requests_path.exists():
             for _, req in iter_request_records(requests_path):
-                requests.append(req)
+                if getattr(req, "phase", "steady_state") == "steady_state":
+                    requests.append(req)
 
         # Slice metrics computation
         slices_config = load_slices(repo_root)

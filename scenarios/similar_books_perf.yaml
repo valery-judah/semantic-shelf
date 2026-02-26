@@ -1,0 +1,17 @@
+scenario_id: similar_books_perf
+scenario_version: 1.0.0
+schema_version: "1.0.0"
+paired_arms: true  # Enables low-variance paired comparisons
+traffic:
+  ramp_up_seconds: 0
+  concurrency: 10
+  warmup_seconds: 10
+  duration_seconds: 30
+anchors:
+  anchor_count: 10  # Sized to match the golden dataset
+validations:
+  status_code: 200
+  response_has_keys:
+    - similar_book_ids
+  no_duplicates: true
+  anchor_not_in_results: true

@@ -27,6 +27,7 @@ async def execute_request(
     scenario_config: ScenarioConfig,
     arm: str | None = None,
     paired_key: str | None = None,
+    phase: str = "steady_state",
 ) -> tuple[RequestRecord, ValidationFailure | None]:
     request_id = f"req-{uuid.uuid4().hex[:8]}"
     url = f"{api_url}/books/{anchor_id}/similar"
@@ -92,6 +93,7 @@ async def execute_request(
                 error_detail=error_detail,
                 latency_ms=latency_ms,
                 timestamp=datetime.now(UTC).isoformat(),
+                phase=phase,
             )
 
         result = RequestRecord(
@@ -108,6 +110,7 @@ async def execute_request(
             timestamp=datetime.now(UTC).isoformat(),
             arm=arm,
             paired_key=paired_key,
+            phase=phase,
         )
 
         return result, failure
@@ -130,6 +133,7 @@ async def execute_request(
                 timestamp=timestamp,
                 arm=arm,
                 paired_key=paired_key,
+                phase=phase,
             ),
             ValidationFailure(
                 request_id=request_id,
@@ -139,6 +143,7 @@ async def execute_request(
                 error_detail="Request timed out",
                 latency_ms=latency_ms,
                 timestamp=timestamp,
+                phase=phase,
             ),
         )
     except httpx.RequestError as e:
@@ -159,6 +164,7 @@ async def execute_request(
                 timestamp=timestamp,
                 arm=arm,
                 paired_key=paired_key,
+                phase=phase,
             ),
             ValidationFailure(
                 request_id=request_id,
@@ -168,6 +174,7 @@ async def execute_request(
                 error_detail=str(e),
                 latency_ms=latency_ms,
                 timestamp=timestamp,
+                phase=phase,
             ),
         )
 
@@ -185,107 +192,152 @@ async def run_load(
     failures: list[ValidationFailure] = []
 
     concurrency = scenario_config.traffic.concurrency
-    request_count = scenario_config.traffic.request_count
-    duration_seconds = scenario_config.traffic.duration_seconds
+    
+    # Optional ramp up
+    ramp_up_seconds = 0
+    if hasattr(scenario_config.traffic, "ramp_up_seconds"):
+         ramp_up_seconds = scenario_config.traffic.ramp_up_seconds
 
     # Shared state for workers
     next_anchor_idx = 0
-    stop_event = asyncio.Event()
 
-    # We use a shared iterator for request_count to ensure exactly that many requests
-    # are generated across all workers.
-    request_iterator = None
-    if request_count is not None:
-        request_iterator = iter(range(request_count))
+    async def run_phase(phase: str, duration: int | None, count: int | None):
+        stop_event = asyncio.Event()
+        
+        # We use a shared iterator for request_count to ensure exactly that many requests
+        request_iterator = None
+        if count is not None:
+            request_iterator = iter(range(count))
 
-    async def worker():
-        nonlocal next_anchor_idx
-        async with httpx.AsyncClient() as client:
-            while not stop_event.is_set():
-                # If we have a fixed request count, grab a ticket
-                if request_iterator is not None:
-                    try:
-                        next(request_iterator)
-                    except StopIteration:
-                        break
+        async def worker(start_delay: float = 0):
+            if start_delay > 0:
+                await asyncio.sleep(start_delay)
 
-                # Round-robin anchor selection
-                # We use a simple atomic-like operation (single threaded event loop)
-                current_idx = next_anchor_idx
-                next_anchor_idx += 1
-                anchor_id = anchors[current_idx % len(anchors)]
+            nonlocal next_anchor_idx
+            async with httpx.AsyncClient() as client:
+                while not stop_event.is_set():
+                    # If we have a fixed request count, grab a ticket
+                    if request_iterator is not None:
+                        try:
+                            next(request_iterator)
+                        except StopIteration:
+                            break
 
-                if scenario_config.paired_arms:
-                    paired_key = uuid.uuid4().hex
-                    # Baseline
-                    res_b, fail_b = await execute_request(
-                        client,
-                        api_url,
-                        anchor_id,
-                        run_id,
-                        scenario_config,
-                        arm="baseline",
-                        paired_key=paired_key,
-                    )
-                    results.append(
-                        res_b if isinstance(res_b, RequestRecord) else RequestRecord(**res_b)
-                    )
-                    if fail_b:
-                        failures.append(
-                            fail_b
-                            if isinstance(fail_b, ValidationFailure)
-                            else ValidationFailure(**fail_b)
+                    # Round-robin anchor selection
+                    # We use a simple atomic-like operation (single threaded event loop)
+                    current_idx = next_anchor_idx
+                    next_anchor_idx += 1
+                    anchor_id = anchors[current_idx % len(anchors)]
+
+                    if scenario_config.paired_arms:
+                        paired_key = uuid.uuid4().hex
+                        # Baseline
+                        res_b, fail_b = await execute_request(
+                            client,
+                            api_url,
+                            anchor_id,
+                            run_id,
+                            scenario_config,
+                            arm="baseline",
+                            paired_key=paired_key,
+                            phase=phase,
+                        )
+                        results.append(
+                            res_b if isinstance(res_b, RequestRecord) else RequestRecord(**res_b)
+                        )
+                        if fail_b:
+                            failures.append(
+                                fail_b
+                                if isinstance(fail_b, ValidationFailure)
+                                else ValidationFailure(**fail_b)
+                            )
+
+                        # Candidate
+                        res_c, fail_c = await execute_request(
+                            client,
+                            api_url,
+                            anchor_id,
+                            run_id,
+                            scenario_config,
+                            arm="candidate",
+                            paired_key=paired_key,
+                            phase=phase,
+                        )
+                        results.append(
+                            res_c if isinstance(res_c, RequestRecord) else RequestRecord(**res_c)
+                        )
+                        if fail_c:
+                            failures.append(
+                                fail_c
+                                if isinstance(fail_c, ValidationFailure)
+                                else ValidationFailure(**fail_c)
+                            )
+                    else:
+                        res, fail = await execute_request(
+                            client, api_url, anchor_id, run_id, scenario_config, phase=phase
                         )
 
-                    # Candidate
-                    res_c, fail_c = await execute_request(
-                        client,
-                        api_url,
-                        anchor_id,
-                        run_id,
-                        scenario_config,
-                        arm="candidate",
-                        paired_key=paired_key,
-                    )
-                    results.append(
-                        res_c if isinstance(res_c, RequestRecord) else RequestRecord(**res_c)
-                    )
-                    if fail_c:
-                        failures.append(
-                            fail_c
-                            if isinstance(fail_c, ValidationFailure)
-                            else ValidationFailure(**fail_c)
-                        )
-                else:
-                    res, fail = await execute_request(
-                        client, api_url, anchor_id, run_id, scenario_config
-                    )
+                        # Append results
+                        record = res if isinstance(res, RequestRecord) else RequestRecord(**res)
+                        results.append(record)
 
-                    # Append results
-                    record = res if isinstance(res, RequestRecord) else RequestRecord(**res)
-                    results.append(record)
+                        if fail:
+                            failure = (
+                                fail
+                                if isinstance(fail, ValidationFailure)
+                                else ValidationFailure(**fail)
+                            )
+                            failures.append(failure)
 
-                    if fail:
-                        failure = (
-                            fail
-                            if isinstance(fail, ValidationFailure)
-                            else ValidationFailure(**fail)
-                        )
-                        failures.append(failure)
+        # Start workers with optional ramp-up
+        workers = []
+        for i in range(concurrency):
+            delay = 0
+            if ramp_up_seconds > 0:
+                delay = (i / concurrency) * ramp_up_seconds
+            workers.append(asyncio.create_task(worker(start_delay=delay)))
 
-    # Start workers
-    workers = []
-    for _ in range(concurrency):
-        workers.append(asyncio.create_task(worker()))
+        if duration is not None:
+            # Add ramp_up_seconds to duration to ensure full load duration? 
+            # Or is duration inclusive? Usually duration is total time.
+            # But let's assume duration is the measurement window.
+            # The prompt says: "Ramp-up duration before target concurrency".
+            # So we should wait ramp_up + duration?
+            # Let's keep it simple: wait duration, then stop. 
+            # If ramp up is large, effective duration at full concurrency is smaller.
+            # But usually we run steady state after ramp up.
+            # Here I'm applying ramp up to every phase. 
+            # Maybe ramp up only applies to steady state?
+            # Or maybe warm up implies ramping up?
+            # Given the plan doesn't specify complex ramp up behavior, I'll just use duration.
+            
+            # If ramp_up is set, we sleep duration + ramp_up? No, usually duration includes everything.
+            await asyncio.sleep(duration)
+            stop_event.set()
 
-    if duration_seconds is not None:
-        await asyncio.sleep(duration_seconds)
-        stop_event.set()
+        await asyncio.gather(*workers)
 
-    await asyncio.gather(*workers)
+    # 1. Warmup Phase
+    warmup_seconds = getattr(scenario_config.traffic, "warmup_seconds", None)
+    warmup_request_count = getattr(scenario_config.traffic, "warmup_request_count", None)
+
+    if warmup_seconds is not None or warmup_request_count is not None:
+        logger.info("Starting warm-up phase...")
+        await run_phase("warmup", warmup_seconds, warmup_request_count)
+        logger.info("Warm-up phase complete.")
+
+    # 2. Steady-State Phase
+    duration_seconds = scenario_config.traffic.duration_seconds
+    request_count = scenario_config.traffic.request_count
+    
+    logger.info("Starting steady-state phase...")
+    await run_phase("steady_state", duration_seconds, request_count)
+
+    # Filter results for summary metrics (steady_state only)
+    steady_results = [r for r in results if r.phase == "steady_state"]
 
     # Calculate percentiles
-    latencies = sorted([r.latency_ms for r in results])
+    latencies = sorted([r.latency_ms for r in steady_results])
 
     def calc_percentile(p):
         if not latencies:
@@ -299,7 +351,7 @@ async def run_load(
 
     # Calculate status code distribution
     status_codes = {}
-    for r in results:
+    for r in steady_results:
         code = r.status_code
         if code is not None:
             code_str = str(code)
@@ -307,9 +359,9 @@ async def run_load(
 
     loadgen_results = LoadgenResults(
         schema_version="1.0.0",
-        total_requests=len(results),
-        passed_requests=sum(1 for r in results if r.passed),
-        failed_requests=sum(1 for r in results if not r.passed),
+        total_requests=len(steady_results),
+        passed_requests=sum(1 for r in steady_results if r.passed),
+        failed_requests=sum(1 for r in steady_results if not r.passed),
         status_code_distribution=status_codes,
         latency_ms={"p50": p50, "p95": p95, "p99": p99},
     )
@@ -326,7 +378,7 @@ async def run_load(
             f.write(req.model_dump_json() + "\n")
 
     logger.info(
-        f"Load generation complete. Total requests: {len(results)}. Failures: {len(failures)}."
+        f"Load generation complete. Total requests: {len(results)} ({len(steady_results)} steady). Failures: {len(failures)}."
     )
 
 
