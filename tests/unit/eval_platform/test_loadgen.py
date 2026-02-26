@@ -1,3 +1,4 @@
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -6,7 +7,7 @@ import pytest
 from httpx import Response
 
 from eval.loadgen import execute_request, run_load
-from eval.schemas.scenario import ScenarioConfig
+from eval.schemas.scenario import ScenarioConfig, TelemetryConfig
 
 
 @pytest.fixture
@@ -32,6 +33,7 @@ async def test_execute_request_success(mock_scenario_config):
 
     mock_response = Response(status_code=200, json={"similar_book_ids": ["2", "3"]})
     mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.post = AsyncMock()
 
     res, fail = await execute_request(
         mock_client, "http://test", "1", "run_123", mock_scenario_config
@@ -43,6 +45,171 @@ async def test_execute_request_success(mock_scenario_config):
     assert res.requests_schema_version == "1.0"
     assert res.response_body is None
     assert fail is None
+
+
+@pytest.mark.asyncio
+async def test_execute_request_telemetry_first_result(mock_scenario_config):
+    mock_scenario_config.telemetry = TelemetryConfig(
+        emit_telemetry=True, telemetry_mode="synthetic", click_model="first_result"
+    )
+
+    mock_client = MagicMock(spec=httpx.AsyncClient)
+    mock_response = Response(
+        status_code=200,
+        json={"similar_book_ids": ["2", "3"], "algo_id": "test_algo", "recs_version": "v1"},
+    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    telemetry_queue = asyncio.Queue(maxsize=10)
+    telemetry_stats: dict[str, int] = {}
+
+    res, fail = await execute_request(
+        mock_client,
+        "http://test",
+        "1",
+        "run_123",
+        mock_scenario_config,
+        telemetry_queue=telemetry_queue,
+        telemetry_stats=telemetry_stats,
+    )
+
+    assert res.passed is True
+    assert telemetry_queue.qsize() == 1
+    assert telemetry_stats["enqueued"] == 1
+
+    queued = telemetry_queue.get_nowait()
+    assert queued["url"] == "http://test/telemetry/events"
+    events = queued["events"]
+    assert len(events) == 2
+
+    # Impression event
+    imp = events[0]
+    assert imp["event_name"] == "similar_impression"
+    assert imp["run_id"] == "run_123"
+    assert imp["anchor_book_id"] == "1"
+    assert imp["is_synthetic"] is True
+    assert imp["algo_id"] == "test_algo"
+    assert imp["recs_version"] == "v1"
+    assert imp["shown_book_ids"] == ["2", "3"]
+    assert imp["positions"] == [0, 1]
+    assert imp["idempotency_key"].startswith("imp_")
+
+    # Click event
+    click = events[1]
+    assert click["event_name"] == "similar_click"
+    assert click["run_id"] == "run_123"
+    assert click["clicked_book_id"] == "2"
+    assert click["position"] == 0
+    assert click["idempotency_key"].startswith("click_")
+
+
+@pytest.mark.asyncio
+async def test_execute_request_telemetry_fixed_ctr(mock_scenario_config):
+    mock_scenario_config.telemetry = TelemetryConfig(
+        emit_telemetry=True,
+        telemetry_mode="synthetic",
+        click_model="fixed_ctr",
+        fixed_ctr=1.0,  # Guarantee a click
+    )
+
+    mock_client = MagicMock(spec=httpx.AsyncClient)
+    mock_response = Response(status_code=200, json={"similar_book_ids": ["2", "3"]})
+    mock_client.get = AsyncMock(return_value=mock_response)
+    telemetry_queue = asyncio.Queue(maxsize=10)
+
+    res, fail = await execute_request(
+        mock_client,
+        "http://test",
+        "1",
+        "run_123",
+        mock_scenario_config,
+        telemetry_queue=telemetry_queue,
+    )
+
+    assert res.passed is True
+    assert telemetry_queue.qsize() == 1
+    events = telemetry_queue.get_nowait()["events"]
+    assert len(events) == 2
+    assert events[1]["event_name"] == "similar_click"
+
+
+@pytest.mark.asyncio
+async def test_execute_request_telemetry_empty_results(mock_scenario_config):
+    mock_scenario_config.telemetry = TelemetryConfig(
+        emit_telemetry=True, telemetry_mode="synthetic", click_model="first_result"
+    )
+
+    mock_client = MagicMock(spec=httpx.AsyncClient)
+    # Empty similar_book_ids
+    mock_response = Response(status_code=200, json={"similar_book_ids": []})
+    mock_client.get = AsyncMock(return_value=mock_response)
+    telemetry_queue = asyncio.Queue(maxsize=10)
+
+    res, fail = await execute_request(
+        mock_client,
+        "http://test",
+        "1",
+        "run_123",
+        mock_scenario_config,
+        telemetry_queue=telemetry_queue,
+    )
+
+    assert res.passed is True
+    assert telemetry_queue.qsize() == 1
+    events = telemetry_queue.get_nowait()["events"]
+    assert len(events) == 1
+    assert events[0]["event_name"] == "similar_impression"
+    assert events[0]["shown_book_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_execute_request_telemetry_disabled(mock_scenario_config):
+    mock_scenario_config.telemetry = TelemetryConfig(emit_telemetry=False, telemetry_mode="none")
+
+    mock_client = MagicMock(spec=httpx.AsyncClient)
+    mock_response = Response(status_code=200, json={"similar_book_ids": ["2", "3"]})
+    mock_client.get = AsyncMock(return_value=mock_response)
+    telemetry_queue = asyncio.Queue(maxsize=10)
+
+    res, fail = await execute_request(
+        mock_client,
+        "http://test",
+        "1",
+        "run_123",
+        mock_scenario_config,
+        telemetry_queue=telemetry_queue,
+    )
+
+    assert res.passed is True
+    assert telemetry_queue.qsize() == 0
+
+
+@pytest.mark.asyncio
+async def test_execute_request_telemetry_queue_full_drops(mock_scenario_config):
+    mock_scenario_config.telemetry = TelemetryConfig(
+        emit_telemetry=True, telemetry_mode="synthetic", click_model="none"
+    )
+    mock_client = MagicMock(spec=httpx.AsyncClient)
+    mock_response = Response(status_code=200, json={"similar_book_ids": ["2", "3"]})
+    mock_client.get = AsyncMock(return_value=mock_response)
+    telemetry_queue = asyncio.Queue(maxsize=1)
+    telemetry_queue.put_nowait(
+        {"events": [], "run_id": "run_123", "request_id": "existing", "url": ""}
+    )
+    telemetry_stats: dict[str, int] = {}
+
+    res, fail = await execute_request(
+        mock_client,
+        "http://test",
+        "1",
+        "run_123",
+        mock_scenario_config,
+        telemetry_queue=telemetry_queue,
+        telemetry_stats=telemetry_stats,
+    )
+
+    assert res.passed is True
+    assert fail is None
+    assert telemetry_stats["dropped"] == 1
 
 
 @pytest.mark.asyncio

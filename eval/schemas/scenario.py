@@ -1,3 +1,5 @@
+from typing import Literal
+
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
@@ -42,6 +44,26 @@ class ValidationConfig(BaseModel):
     anchor_not_in_results: bool = Field(True, description="Ensure anchor ID is not in results")
 
 
+class TelemetryConfig(BaseModel):
+    emit_telemetry: bool = Field(default=False, description="Whether to emit synthetic telemetry")
+    telemetry_mode: Literal["synthetic", "none"] = Field(
+        default="none", description="Telemetry emission mode"
+    )
+    click_model: Literal["none", "first_result", "fixed_ctr"] = Field(
+        default="none", description="Simulation model for click events"
+    )
+    fixed_ctr: float | None = Field(default=None, description="Target CTR for fixed_ctr model")
+
+    @model_validator(mode="after")
+    def validate_fixed_ctr(self) -> "TelemetryConfig":
+        if self.click_model == "fixed_ctr":
+            if self.fixed_ctr is None:
+                raise ValueError("fixed_ctr is required when click_model is fixed_ctr")
+            if not (0.0 <= self.fixed_ctr <= 1.0):
+                raise ValueError("fixed_ctr must be between 0.0 and 1.0")
+        return self
+
+
 class ScenarioConfig(BaseModel):
     scenario_id: str
     scenario_version: str
@@ -49,6 +71,9 @@ class ScenarioConfig(BaseModel):
     traffic: TrafficConfig
     anchors: AnchorConfig
     validations: ValidationConfig
+    telemetry: TelemetryConfig | None = Field(
+        default=None, description="Optional telemetry configuration"
+    )
     paired_arms: bool = Field(False, description="Enable paired baseline/candidate execution")
 
     @classmethod

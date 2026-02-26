@@ -161,10 +161,14 @@ Extend `eval/schemas/scenario.py` with optional telemetry block:
 
 In `eval/loadgen.py`:
 
-- after each successful similar-books response, emit `similar_impression`
-- optionally emit `similar_click` based on configured synthetic click model
-- include `run_id`, `request_id`, `surface`, `arm`, `is_synthetic=true`
+- after each successful similar-books response, build `similar_impression`
+- optionally build `similar_click` based on configured synthetic click model
+- include required event fields (`telemetry_schema_version`, `ts`, `run_id`, `request_id`, `surface`, `arm`, `anchor_book_id`, `is_synthetic=true`, `algo_id`, `recs_version`)
 - set deterministic `idempotency_key` per logical event
+- enqueue telemetry batches to a bounded in-memory queue using non-blocking enqueue (`put_nowait`)
+- flush telemetry from background worker task(s) via `POST /telemetry/events` (best-effort), so `/books/{id}/similar` request throughput is not gated by telemetry endpoint latency
+- if queue is full, drop telemetry for that request and count/log drops (no backpressure on load loop)
+- at run end, drain queue with bounded wait, then stop workers and log flush summary counters (`enqueued`, `sent`, `failed`, `dropped`)
 
 Paired mode:
 
@@ -247,6 +251,7 @@ Report updates in `eval/rendering.py`:
 - end-to-end run emits synthetic telemetry and evaluator writes telemetry extract
 - recompute CTR from extract equals summary CTR
 - synthetic telemetry clearly flagged in report/summary
+- telemetry queue-full behavior drops synthetic events without blocking request execution
 
 ## 8) Acceptance Criteria (Stage Exit)
 
@@ -287,6 +292,9 @@ Primary files expected to change:
 - Risk: event duplication inflates metrics.
 - Mitigation: unique `idempotency_key` + conflict-safe writes + duplicate-rate diagnostics.
 
+- Risk: synchronous telemetry posting under-drives load and distorts latency/throughput metrics.
+- Mitigation: queue-based asynchronous telemetry emission with bounded queue and drop-on-full semantics.
+
 - Risk: schema churn breaks producers.
 - Mitigation: versioned schema and temporary compatibility path.
 
@@ -298,7 +306,7 @@ Primary files expected to change:
 - [x] Telemetry schema v1 implemented and validated
 - [x] `telemetry_events` table + indices + unique constraint added
 - [x] idempotent DB writes implemented
-- [ ] loadgen synthetic telemetry emission implemented
+- [x] loadgen synthetic telemetry emission implemented
 - [ ] evaluator telemetry query by `run_id` implemented
 - [ ] `raw/telemetry_extract.jsonl` generated
 - [ ] summary/report quality section added

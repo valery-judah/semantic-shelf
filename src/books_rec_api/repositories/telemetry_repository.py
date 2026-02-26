@@ -1,6 +1,6 @@
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-import logging
 from typing import Any
 
 from sqlalchemy import and_, or_, select

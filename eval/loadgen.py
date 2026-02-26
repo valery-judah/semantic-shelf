@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -19,12 +20,81 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 
+def _build_synthetic_telemetry_events(
+    response_data: dict,
+    request_id: str,
+    run_id: str,
+    anchor_id: str,
+    arm: str | None,
+    click_model: str,
+    fixed_ctr: float | None,
+) -> list[dict]:
+    similar_ids = response_data.get("similar_book_ids", [])
+    algo_id = response_data.get("algo_id", "unknown")
+    recs_version = response_data.get("recs_version", "unknown")
+
+    events = [
+        {
+            "telemetry_schema_version": "1.0.0",
+            "event_name": "similar_impression",
+            "ts": datetime.now(UTC).isoformat(),
+            "request_id": request_id,
+            "run_id": run_id,
+            "surface": "eval_loadgen",
+            "arm": arm or "unknown",
+            "anchor_book_id": anchor_id,
+            "is_synthetic": True,
+            "idempotency_key": f"imp_{request_id}",
+            "algo_id": algo_id,
+            "recs_version": recs_version,
+            "shown_book_ids": similar_ids,
+            "positions": list(range(len(similar_ids))),
+        }
+    ]
+
+    clicked_pos = None
+    clicked_id = None
+    if similar_ids:
+        if click_model == "first_result":
+            clicked_pos = 0
+            clicked_id = similar_ids[0]
+        elif click_model == "fixed_ctr" and fixed_ctr is not None:
+            hash_val = int(hashlib.md5(request_id.encode()).hexdigest(), 16)
+            if (hash_val % 10000) / 10000.0 < fixed_ctr:
+                clicked_pos = 0
+                clicked_id = similar_ids[0]
+
+    if clicked_id is not None and clicked_pos is not None:
+        events.append(
+            {
+                "telemetry_schema_version": "1.0.0",
+                "event_name": "similar_click",
+                "ts": datetime.now(UTC).isoformat(),
+                "request_id": request_id,
+                "run_id": run_id,
+                "surface": "eval_loadgen",
+                "arm": arm or "unknown",
+                "anchor_book_id": anchor_id,
+                "is_synthetic": True,
+                "idempotency_key": f"click_{request_id}",
+                "algo_id": algo_id,
+                "recs_version": recs_version,
+                "clicked_book_id": clicked_id,
+                "position": clicked_pos,
+            }
+        )
+
+    return events
+
+
 async def execute_request(
     client: httpx.AsyncClient,
     api_url: str,
     anchor_id: str,
     run_id: str,
     scenario_config: ScenarioConfig,
+    telemetry_queue: asyncio.Queue[dict | None] | None = None,
+    telemetry_stats: dict[str, int] | None = None,
     arm: str | None = None,
     paired_key: str | None = None,
     phase: str = "steady_state",
@@ -95,6 +165,43 @@ async def execute_request(
                 timestamp=datetime.now(UTC).isoformat(),
                 phase=phase,
             )
+        else:
+            tel_config = scenario_config.telemetry
+            if (
+                tel_config
+                and tel_config.emit_telemetry
+                and tel_config.telemetry_mode == "synthetic"
+                and telemetry_queue is not None
+            ):
+                try:
+                    events = _build_synthetic_telemetry_events(
+                        response_data=response.json(),
+                        request_id=request_id,
+                        run_id=run_id,
+                        anchor_id=anchor_id,
+                        arm=arm,
+                        click_model=tel_config.click_model,
+                        fixed_ctr=tel_config.fixed_ctr,
+                    )
+                    telemetry_queue.put_nowait(
+                        {
+                            "events": events,
+                            "run_id": run_id,
+                            "request_id": request_id,
+                            "url": f"{api_url}/telemetry/events",
+                        }
+                    )
+                    if telemetry_stats is not None:
+                        telemetry_stats["enqueued"] = telemetry_stats.get("enqueued", 0) + 1
+                except asyncio.QueueFull:
+                    if telemetry_stats is not None:
+                        telemetry_stats["dropped"] = telemetry_stats.get("dropped", 0) + 1
+                    logger.warning(
+                        "Dropping telemetry for request %s due to full queue",
+                        request_id,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to emit telemetry for request {request_id}: {e}")
 
         result = RequestRecord(
             requests_schema_version="1.0",
@@ -192,6 +299,47 @@ async def run_load(
     failures: list[ValidationFailure] = []
 
     concurrency = scenario_config.traffic.concurrency
+    telemetry_queue: asyncio.Queue[dict | None] | None = None
+    telemetry_workers: list[asyncio.Task] = []
+    telemetry_stats: dict[str, int] = {"enqueued": 0, "dropped": 0, "sent": 0, "failed": 0}
+
+    tel_config = scenario_config.telemetry
+    telemetry_enabled = (
+        tel_config is not None
+        and tel_config.emit_telemetry
+        and tel_config.telemetry_mode == "synthetic"
+    )
+    if telemetry_enabled:
+        queue_size = max(100, concurrency * 20)
+        worker_count = max(1, min(4, concurrency))
+        telemetry_queue = asyncio.Queue(maxsize=queue_size)
+
+        async def telemetry_worker() -> None:
+            async with httpx.AsyncClient() as telemetry_client:
+                while True:
+                    batch = await telemetry_queue.get()
+                    if batch is None:
+                        telemetry_queue.task_done()
+                        break
+                    try:
+                        await telemetry_client.post(
+                            batch["url"],
+                            json={"events": batch["events"]},
+                            headers={"X-Eval-Run-Id": batch["run_id"]},
+                            timeout=2.0,
+                        )
+                        telemetry_stats["sent"] += 1
+                    except Exception as e:
+                        telemetry_stats["failed"] += 1
+                        logger.warning(
+                            "Failed to flush telemetry for request %s: %s",
+                            batch["request_id"],
+                            e,
+                        )
+                    finally:
+                        telemetry_queue.task_done()
+
+        telemetry_workers = [asyncio.create_task(telemetry_worker()) for _ in range(worker_count)]
 
     # Optional ramp up
     ramp_up_seconds = 0
@@ -238,6 +386,8 @@ async def run_load(
                             anchor_id,
                             run_id,
                             scenario_config,
+                            telemetry_queue=telemetry_queue,
+                            telemetry_stats=telemetry_stats,
                             arm="baseline",
                             paired_key=paired_key,
                             phase=phase,
@@ -259,6 +409,8 @@ async def run_load(
                             anchor_id,
                             run_id,
                             scenario_config,
+                            telemetry_queue=telemetry_queue,
+                            telemetry_stats=telemetry_stats,
                             arm="candidate",
                             paired_key=paired_key,
                             phase=phase,
@@ -274,7 +426,14 @@ async def run_load(
                             )
                     else:
                         res, fail = await execute_request(
-                            client, api_url, anchor_id, run_id, scenario_config, phase=phase
+                            client,
+                            api_url,
+                            anchor_id,
+                            run_id,
+                            scenario_config,
+                            telemetry_queue=telemetry_queue,
+                            telemetry_stats=telemetry_stats,
+                            phase=phase,
                         )
 
                         # Append results
@@ -333,6 +492,25 @@ async def run_load(
 
     logger.info("Starting steady-state phase...")
     await run_phase("steady_state", duration_seconds, request_count)
+
+    if telemetry_queue is not None:
+        try:
+            await asyncio.wait_for(telemetry_queue.join(), timeout=5.0)
+        except TimeoutError:
+            logger.warning(
+                "Timed out draining telemetry queue; remaining=%s", telemetry_queue.qsize()
+            )
+
+        for _ in telemetry_workers:
+            await telemetry_queue.put(None)
+        await asyncio.gather(*telemetry_workers, return_exceptions=True)
+        logger.info(
+            "Telemetry flush summary: enqueued=%s sent=%s failed=%s dropped=%s",
+            telemetry_stats["enqueued"],
+            telemetry_stats["sent"],
+            telemetry_stats["failed"],
+            telemetry_stats["dropped"],
+        )
 
     # Filter results for summary metrics (steady_state only)
     steady_results = [r for r in results if r.phase == "steady_state"]

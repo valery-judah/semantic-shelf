@@ -10,7 +10,38 @@ from eval.schemas.raw import (
     ValidationFailure,
 )
 from eval.schemas.run import RunMetadata
+from eval.schemas.scenario import TelemetryConfig
 from eval.schemas.summary import RunSummary
+
+
+def test_telemetry_config_valid_fixed_ctr() -> None:
+    config = TelemetryConfig(
+        emit_telemetry=True, telemetry_mode="synthetic", click_model="fixed_ctr", fixed_ctr=0.5
+    )
+    assert config.fixed_ctr == 0.5
+
+
+def test_telemetry_config_missing_fixed_ctr() -> None:
+    with pytest.raises(
+        ValidationError, match="fixed_ctr is required when click_model is fixed_ctr"
+    ):
+        TelemetryConfig(
+            emit_telemetry=True, telemetry_mode="synthetic", click_model="fixed_ctr", fixed_ctr=None
+        )
+
+
+def test_telemetry_config_invalid_fixed_ctr_high() -> None:
+    with pytest.raises(ValidationError, match="fixed_ctr must be between 0.0 and 1.0"):
+        TelemetryConfig(
+            emit_telemetry=True, telemetry_mode="synthetic", click_model="fixed_ctr", fixed_ctr=1.5
+        )
+
+
+def test_telemetry_config_invalid_fixed_ctr_low() -> None:
+    with pytest.raises(ValidationError, match="fixed_ctr must be between 0.0 and 1.0"):
+        TelemetryConfig(
+            emit_telemetry=True, telemetry_mode="synthetic", click_model="fixed_ctr", fixed_ctr=-0.1
+        )
 
 
 def test_run_metadata_schema_valid() -> None:
