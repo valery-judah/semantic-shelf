@@ -4,12 +4,14 @@ import logging
 import os
 import sys
 from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from eval.schemas.raw import (
     AnchorSelection,
+    DebugRequestSample,
     LoadgenResults,
     RequestRecord,
     ValidationFailure,
@@ -21,13 +23,25 @@ from eval.schemas.summary import EvaluationCounts, LatencyMetrics, RunSummary
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+RUN_SCHEMA_VERSION = "1.0"
+ANCHORS_SCHEMA_VERSION = "1.0"
+REQUESTS_SCHEMA_VERSION = "1.0"
+LOADGEN_SCHEMA_VERSION = "1.0.0"
+DEBUG_SCHEMA_VERSION = "1.0.0"
+
 
 def load_run_metadata(base_dir: Path) -> RunMetadata:
     run_json_path = base_dir / "run.json"
     if not run_json_path.exists():
         raise FileNotFoundError(f"Could not find run metadata at {run_json_path}")
     run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
-    return RunMetadata(**run_data)
+    run_meta = RunMetadata(**run_data)
+    if run_meta.run_schema_version != RUN_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported run.json run_schema_version {run_meta.run_schema_version!r}; "
+            f"expected {RUN_SCHEMA_VERSION!r}."
+        )
+    return run_meta
 
 
 def load_scenario_config(repo_root: Path, scenario_id: str) -> ScenarioConfig | None:
@@ -42,7 +56,13 @@ def load_anchors(raw_dir: Path) -> AnchorSelection:
     if not anchors_path.exists():
         raise FileNotFoundError(f"Could not find anchors selection at {anchors_path}")
     anchors_data = json.loads(anchors_path.read_text(encoding="utf-8"))
-    return AnchorSelection(**anchors_data)
+    anchors = AnchorSelection(**anchors_data)
+    if anchors.anchors_schema_version != ANCHORS_SCHEMA_VERSION:
+        raise ValueError(
+            "Unsupported anchors.json anchors_schema_version "
+            f"{anchors.anchors_schema_version!r}; expected {ANCHORS_SCHEMA_VERSION!r}."
+        )
+    return anchors
 
 
 def load_validation_failures(raw_dir: Path) -> list[ValidationFailure]:
@@ -72,10 +92,12 @@ def load_loadgen_results(raw_dir: Path) -> LoadgenResults:
         raise FileNotFoundError(f"Could not find loadgen results at {results_path}")
     results_data = LoadgenResults(**json.loads(results_path.read_text(encoding="utf-8")))
 
-    # Assert schema_version
     schema_version = results_data.schema_version
-    if schema_version != "1.0.0":
-        logger.warning(f"Unexpected loadgen_results schema_version: {schema_version}")
+    if schema_version != LOADGEN_SCHEMA_VERSION:
+        raise ValueError(
+            "Unsupported loadgen_results schema_version "
+            f"{schema_version!r}; expected {LOADGEN_SCHEMA_VERSION!r}."
+        )
 
     return results_data
 
@@ -129,17 +151,9 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
 
     anchor_max_latency: dict[str, float] = defaultdict(float)
 
-    with requests_path.open(encoding="utf-8") as f:
-        for line in f:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                request = RequestRecord(**json.loads(stripped))
-                if request.latency_ms > anchor_max_latency[request.anchor_id]:
-                    anchor_max_latency[request.anchor_id] = request.latency_ms
-            except (json.JSONDecodeError, ValidationError):
-                continue
+    for _, request in iter_request_records(requests_path):
+        if request.latency_ms > anchor_max_latency[request.anchor_id]:
+            anchor_max_latency[request.anchor_id] = request.latency_ms
 
     sorted_anchors = sorted(anchor_max_latency.items(), key=lambda item: (-item[1], item[0]))
     return sorted_anchors[:n]
@@ -158,30 +172,38 @@ def extract_debug_bundles(
 
     anchor_counts: dict[str, int] = defaultdict(int)
 
-    with requests_path.open(encoding="utf-8") as f:
-        for line in f:
-            if not target_anchor_ids:
-                break
+    for line_no, request in iter_request_records(requests_path):
+        if not target_anchor_ids:
+            break
 
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                request = RequestRecord(**json.loads(stripped))
-                anchor_id = request.anchor_id
-                if anchor_id in target_anchor_ids and anchor_counts[anchor_id] < limit_per_anchor:
-                    anchor_dir = sample_dir / anchor_id
-                    anchor_dir.mkdir(parents=True, exist_ok=True)
+        anchor_id = request.anchor_id
+        if anchor_id in target_anchor_ids and anchor_counts[anchor_id] < limit_per_anchor:
+            anchor_dir = sample_dir / anchor_id
+            anchor_dir.mkdir(parents=True, exist_ok=True)
 
-                    file_path = anchor_dir / f"{request.request_id}.json"
-                    file_path.write_text(request.model_dump_json(indent=2), encoding="utf-8")
-                    written_files.append(str(file_path.relative_to(base_dir)))
+            debug_sample = DebugRequestSample(
+                debug_schema_version=DEBUG_SCHEMA_VERSION,
+                source_requests_line=line_no,
+                run_id=request.run_id,
+                request_id=request.request_id,
+                scenario_id=request.scenario_id,
+                anchor_id=request.anchor_id,
+                method=request.method,
+                path=request.path,
+                status_code=request.status_code,
+                failure_type=request.failure_type,
+                latency_ms=request.latency_ms,
+                response_body=request.response_body,
+                timestamp=request.timestamp,
+            )
 
-                    anchor_counts[anchor_id] += 1
-                    if anchor_counts[anchor_id] >= limit_per_anchor:
-                        target_anchor_ids.remove(anchor_id)
-            except (json.JSONDecodeError, ValidationError):
-                continue
+            file_path = anchor_dir / f"{request.request_id}.json"
+            file_path.write_text(debug_sample.model_dump_json(indent=2), encoding="utf-8")
+            written_files.append(str(file_path.relative_to(base_dir)))
+
+            anchor_counts[anchor_id] += 1
+            if anchor_counts[anchor_id] >= limit_per_anchor:
+                target_anchor_ids.remove(anchor_id)
 
     return sorted(written_files)
 
@@ -192,6 +214,31 @@ def _scenario_mode(config: ScenarioConfig | None) -> str:
     if config.traffic.request_count is not None:
         return f"request_count={config.traffic.request_count}"
     return f"duration_seconds={config.traffic.duration_seconds}"
+
+
+def iter_request_records(requests_path: Path) -> Iterator[tuple[int, RequestRecord]]:
+    with requests_path.open(encoding="utf-8") as f:
+        for lineno, line in enumerate(f, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                payload = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid requests.jsonl line {lineno}: {exc}") from exc
+
+            try:
+                record = RequestRecord(**payload)
+            except ValidationError as exc:
+                raise ValueError(f"Invalid requests.jsonl line {lineno}: {exc}") from exc
+
+            if record.requests_schema_version != REQUESTS_SCHEMA_VERSION:
+                raise ValueError(
+                    f"Unsupported requests.jsonl schema_version on line {lineno}: "
+                    f"{record.requests_schema_version!r}; expected {REQUESTS_SCHEMA_VERSION!r}."
+                )
+
+            yield lineno, record
 
 
 def generate_report(
@@ -274,6 +321,14 @@ def generate_report(
     lines.append("- `raw/requests.jsonl`")
     if debug_files:
         lines.append("- `raw/sample_requests/...`")
+
+    lines.append("")
+    lines.append("## 6. How to reproduce")
+    lines.append(f"- `uv run python eval/evaluator.py --run-id {run_meta.run_id}`")
+    lines.append(
+        "- `uv run python eval/compare.py --scenario "
+        f"{run_meta.scenario_id} --run-id {run_meta.run_id}` (if baseline exists)"
+    )
 
     return "\n".join(lines)
 

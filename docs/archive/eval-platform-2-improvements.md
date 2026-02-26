@@ -11,6 +11,28 @@ This document captures concrete, implementation-ready suggestions to improve the
 
 ---
 
+## Implementation status (current)
+
+This section tracks what has already been implemented versus what remains.
+
+### Done
+- [x] Scenario Summary report block is present with stable heading/order.
+- [x] Strict fail-fast validation for unsupported `raw/loadgen_results.json` schema version.
+- [x] Strict fail-fast parsing for malformed `raw/requests.jsonl` rows with line-number errors.
+- [x] Deterministic tie-break ordering for top failing anchors and worst latency anchors.
+- [x] Formal debug sample schema added (`DebugRequestSample`) with `debug_schema_version`.
+- [x] "How to reproduce" section added to report output.
+- [x] Unit coverage added for strict schema/version failures and malformed requests rows.
+
+### Not done yet
+- [ ] Parser split into dedicated modules (`eval/parsers/*`) is still pending.
+- [ ] Metrics/rendering extraction into dedicated modules (e.g., `eval/metrics.py`) is still pending.
+- [ ] Loadgen broad `except Exception` cleanup is still pending.
+- [ ] Full determinism regression tests from section 5.2 are still pending.
+- [ ] Expanded debug bundle tests from section 5.1 are still pending (sample cap/no-overwrite/pointer-completeness assertions).
+
+---
+
 ## 1) Highest-priority fixes (recommended first)
 
 ### 1.1 Add explicit Scenario Summary block to `report/report.md`

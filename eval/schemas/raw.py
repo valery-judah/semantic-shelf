@@ -90,3 +90,21 @@ class ValidationFailure(BaseModel):
     error_detail: str | None = Field(None)
     latency_ms: float = Field(..., ge=0.0)
     timestamp: datetime
+
+
+class DebugRequestSample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    debug_schema_version: str = Field("1.0.0", min_length=1)
+    source_requests_line: int = Field(..., ge=1)
+    run_id: str = Field(..., min_length=1)
+    request_id: str = Field(..., min_length=1)
+    scenario_id: str = Field(..., min_length=1)
+    anchor_id: str = Field(..., min_length=1)
+    method: str | None = Field(None, min_length=1)
+    path: str | None = Field(None, min_length=1)
+    status_code: int | None = Field(None, ge=100, le=599)
+    failure_type: str | None = Field(None)
+    latency_ms: float = Field(..., ge=0.0)
+    response_body: str | None = Field(None)
+    timestamp: datetime
