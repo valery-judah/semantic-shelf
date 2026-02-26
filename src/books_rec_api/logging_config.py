@@ -21,11 +21,38 @@ class JsonFormatter(logging.Formatter):
 
         eval_run_id = eval_run_id_var.get()
         if eval_run_id:
-            payload["eval_run_id"] = eval_run_id
+            payload["run_id"] = eval_run_id
 
         eval_request_id = eval_request_id_var.get()
         if eval_request_id:
             payload["request_id"] = eval_request_id
+
+        default_keys = {
+            "name",
+            "msg",
+            "args",
+            "levelname",
+            "levelno",
+            "pathname",
+            "filename",
+            "module",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "lineno",
+            "funcName",
+            "created",
+            "msecs",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "processName",
+            "process",
+            "message",
+        }
+        for key, value in record.__dict__.items():
+            if key not in default_keys and key not in payload:
+                payload[key] = value
 
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)

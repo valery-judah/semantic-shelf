@@ -11,11 +11,11 @@ This plan details the implementation of **Stage 0** for the incremental evaluati
 - **Changes in `src/books_rec_api/main.py`:**
   - Create a FastAPI middleware (or integrate via a global dependency if more appropriate) to inspect incoming HTTP requests.
   - Read `X-Eval-Run-Id` and `X-Request-Id` headers.
-  - Use `contextvars` to set `eval_run_id` and `eval_request_id` context variables for the lifetime of the request.
+  - Use `contextvars` to set `run_id` and `eval_request_id` context variables for the lifetime of the request.
 
 - **Changes in `src/books_rec_api/logging_config.py`:**
   - Define `contextvars` for the tracking variables.
-  - Update `JsonFormatter` to conditionally include `eval_run_id` and `eval_request_id` in the JSON log payload if they are present in the current context.
+  - Update `JsonFormatter` to conditionally include `run_id` and `request_id` in the JSON log payload if they are present in the current context.
 
 - **Testing:**
   - Add unit tests validating that incoming requests with these headers correctly update the JSON log output.
@@ -53,6 +53,7 @@ This plan details the implementation of **Stage 0** for the incremental evaluati
     - `artifacts/eval/<run_id>/summary/`
     - `artifacts/eval/<run_id>/report/`
   - Writes a valid `run.json` into the run's root directory, matching the Pydantic schema defined above.
+  - Writes deterministic anchor selections to `raw/anchors.json` and request results to `raw/requests.jsonl`.
   - Generates a dummy/test API request against a local running instance, passing `X-Eval-Run-Id` and `X-Request-Id` to demonstrate that the logging infrastructure correctly tracks the run.
 
 ## 4. Stub Evaluator (`eval/evaluator.py`)

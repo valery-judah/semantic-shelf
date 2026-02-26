@@ -43,11 +43,30 @@ def test_json_formatter_emits_context_vars() -> None:
 
     try:
         payload = json.loads(formatter.format(record))
-        assert payload["eval_run_id"] == "run-123"
+        assert payload["run_id"] == "run-123"
         assert payload["request_id"] == "req-456"
     finally:
         eval_run_id_var.reset(t1)
         eval_request_id_var.reset(t2)
+
+
+def test_json_formatter_emits_extra_fields() -> None:
+    formatter = JsonFormatter(service_name="books-rec-api")
+    record = logging.LogRecord(
+        name="books_rec_api.request",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=10,
+        msg="http_request_complete",
+        args=(),
+        exc_info=None,
+    )
+    record.method = "GET"  # type: ignore[attr-defined]
+    record.path = "/books"  # type: ignore[attr-defined]
+    payload = json.loads(formatter.format(record))
+
+    assert payload["method"] == "GET"
+    assert payload["path"] == "/books"
 
 
 def test_configure_logging_plain_text_format() -> None:

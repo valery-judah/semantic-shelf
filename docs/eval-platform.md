@@ -70,7 +70,7 @@ A **Run** is a single evaluation execution with a globally unique identifier:
 - Every loadgen request includes:
   - `X-Eval-Run-Id: <run_id>`
   - `X-Request-Id: <request_id>` (unique per request)
-- Telemetry events include `eval_run_id=<run_id>` (or an equivalent stable field).
+- Telemetry events include `run_id=<run_id>` (or an equivalent stable field).
 
 ### Request
 
@@ -200,7 +200,7 @@ flowchart LR
   TEL --> DB
 
   EVAL -->|read raw outputs| ART
-  EVAL -->|query telemetry where eval_run_id=run_id (optional)| DB
+  EVAL -->|query telemetry where run_id=run_id (optional)| DB
   EVAL -->|write summary + report| ART
 ```
 
@@ -342,7 +342,7 @@ Minimal event properties (conceptual):
 - identity:
   - `event_id` (or derived idempotency key), `event_name`, `ts`
 - run/request:
-  - `eval_run_id`, `request_id`, `surface`
+  - `run_id`, `request_id`, `surface`
 - content:
   - `anchor_id`, `shown_ids`, `positions`, optional `clicked_id`
 - metadata:
@@ -350,7 +350,7 @@ Minimal event properties (conceptual):
 
 Important invariants:
 
-- evaluator must be able to query **only** events for the run (`eval_run_id`).
+- evaluator must be able to query **only** events for the run (`run_id`).
 - events should be idempotent (avoid double writes from retries).
 - schema must be versioned; new fields should be backward compatible when possible.
 
@@ -856,15 +856,15 @@ This plan is organized around **capabilities** (what you can trust and act on) r
 
 - **Telemetry schema v1**
   - versioned event schema (`telemetry_schema_version`)
-  - explicit `eval_run_id`, `request_id`, `surface`, `arm`, and timestamps
+  - explicit `run_id`, `request_id`, `surface`, `arm`, and timestamps
   - idempotency key to avoid double counting
   - explicit `is_synthetic` marker for generated events
 - **Storage**
   - `telemetry_events` table in Postgres (recommended) with indices:
-    - `(eval_run_id)`, `(eval_run_id, event_name)`, `(request_id)`
+    - `(run_id)`, `(run_id, event_name)`, `(request_id)`
   - or JSONL event store (acceptable if evaluator performance is fine)
 - **Evaluator integration**
-  - evaluator can query events for `eval_run_id` only
+  - evaluator can query events for `run_id` only
   - evaluator writes `raw/telemetry_extract.jsonl` (optional) for reproducibility
 
 **Exit criteria**
@@ -962,8 +962,8 @@ This plan is organized around **capabilities** (what you can trust and act on) r
 
 If using Postgres, create a single `telemetry_events` table with:
 
-- indexed `eval_run_id`
-- indexed `(eval_run_id, event_name)`
-- optional idempotency unique key on `(eval_run_id, request_id, event_name, arm)`
+- indexed `run_id`
+- indexed `(run_id, event_name)`
+- optional idempotency unique key on `(run_id, request_id, event_name, arm)`
 
 Keep `payload_json` only if you must; prefer typed columns for common fields used in evaluators (anchor id, shown ids, clicked id, positions).

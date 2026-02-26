@@ -47,7 +47,7 @@ These are requirements that apply across all stages.
 
 ### R1: Run identity propagation
 
-- Every request must include `run_id` and `request_id`.
+- Every evaluation-generated request must include `run_id` and `request_id`.
 - Any stored data must be filterable by `run_id`.
 
 ### R2: Artifact immutability
@@ -57,7 +57,7 @@ These are requirements that apply across all stages.
 
 ### R3: Schema versioning and validation
 
-- `run.json`, `summary.json`, telemetry event schema must be versioned.
+- `run.json`, `summary/summary.json`, telemetry event schema must be versioned.
 - Evaluator must validate schema and fail fast with actionable errors.
 
 ### R4: Deterministic inputs
@@ -103,6 +103,7 @@ These are requirements that apply across all stages.
 
 - Run-scoped directory: `./artifacts/eval/<run_id>/`
 - Reserved subdirectories: `raw/`, `summary/`, `report/`, `logs/` (optional)
+- Stage 0 raw artifacts include deterministic `raw/anchors.json` and `raw/requests.jsonl`.
 
 **D0.3 Schemas (described, not fully enumerated)**
 
@@ -113,7 +114,7 @@ These are requirements that apply across all stages.
   - config overrides/flags (at least pointer/summary)
   - seed and dataset identifiers
   - schema version field (e.g., `run_schema_version`)
-- `summary.json` schema:
+- `summary/summary.json` schema:
   - minimal metric slots for counts, latency, failures
   - schema version field (e.g., `summary_schema_version`)
 
@@ -126,14 +127,17 @@ These are requirements that apply across all stages.
 
 - Running the same scenario twice with the same seed yields the same anchor list (or the same selection procedure with stable output).
 - For any request, logs show `run_id` and `request_id`.
-- A run directory contains `run.json` and placeholder `summary.json` without schema violations.
+- A run directory contains `run.json`, `raw/anchors.json`, and placeholder `summary/summary.json` without schema violations.
 
 ### Implementation checklist
 
 - [ ] Add headers in loadgen client
 - [ ] Add structured logging fields in app
+- [ ] Emit one structured request-completion log per request with `run_id` and `request_id`
 - [ ] Define `schemas/` folder with versioned schema specs and tests
 - [ ] Add minimal "schema validation" step in evaluator (even if evaluator is stub)
+- [ ] Persist deterministic anchor list to `raw/anchors.json`
+- [ ] Persist per-request records to `raw/requests.jsonl`
 
 ### Risks and mitigations
 
@@ -207,7 +211,7 @@ These are requirements that apply across all stages.
 
 ### Capabilities unlocked
 
-- Machine-readable metrics (`summary.json`) suitable for CI gating.
+- Machine-readable metrics (`summary/summary.json`) suitable for CI gating.
 - Human-readable report (`report.md`) with triage paths and debug samples.
 
 ### Deliverables
@@ -250,7 +254,7 @@ Report must include:
 - A failing run provides:
   - at least one concrete example payload for the top issue,
   - enough data to reproduce failing anchors locally (anchor list and seed).
-- `summary.json` stays stable across non-breaking changes; diffs are meaningful.
+- `summary/summary.json` stays stable across non-breaking changes; diffs are meaningful.
 
 ### Implementation checklist
 
@@ -292,7 +296,7 @@ Baseline must be discoverable by CI, e.g.:
 
 **D3.2 Diff tool**
 
-- Compare candidate `summary.json` vs baseline `summary.json`.
+- Compare candidate `summary/summary.json` vs baseline `summary/summary.json`.
 - Output `deltas.json`:
   - absolute deltas and relative deltas
   - per-metric pass/fail status for gate metrics
@@ -450,7 +454,7 @@ Required fields (conceptually):
 - `telemetry_schema_version`
 - `event_name` (e.g., `similar_impression`, `similar_click`)
 - `ts`
-- `eval_run_id`, `request_id`
+- `run_id`, `request_id`
 - `surface`
 - `arm` (if used)
 - anchor id
@@ -459,16 +463,21 @@ Required fields (conceptually):
 - `is_synthetic` (mandatory when synthetic)
 - idempotency key / unique constraint basis
 
+Compatibility note:
+- If earlier telemetry used `eval_run_id`, Stage 6 must include an explicit migration:
+  - one-time backfill/rename for stored telemetry, and/or
+  - temporary dual-read/dual-write compatibility during rollout.
+
 **D6.2 Storage**
 
 - Postgres `telemetry_events` preferred:
-  - indices on `eval_run_id`, `event_name`, `request_id`
+  - indices on `run_id`, `event_name`, `request_id`
   - unique constraint for idempotency
 - Alternative: JSONL events as raw artifacts (works but may be slower/less queryable).
 
 **D6.3 Evaluator integration**
 
-- Query by `eval_run_id` only.
+- Query by `run_id` only.
 - Optionally export events used into `raw/telemetry_extract.jsonl` for reproducibility.
 
 ### Acceptance criteria / exit criteria

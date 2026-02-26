@@ -18,12 +18,12 @@ def test_eval_context_middleware() -> None:
 
     client = TestClient(app)
 
-    # Without headers
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"eval_run_id": None, "eval_request_id": None}
+    data = response.json()
+    assert data["eval_run_id"] == "none"
+    assert data["eval_request_id"].startswith("req-")
 
-    # With headers
     response = client.get("/", headers={"X-Eval-Run-Id": "run-123", "X-Request-Id": "req-456"})
     assert response.status_code == 200
     assert response.json() == {
