@@ -35,6 +35,7 @@ def _write_run_fixture(base_dir: Path, run_id: str) -> None:
         "total_requests": 2,
         "passed_requests": 2,
         "failed_requests": 0,
+        "status_code_distribution": {"200": 2},
         "latency_ms": {"p50": 12.0, "p95": 30.0, "p99": 30.0},
     }
     (raw_dir / "loadgen_results.json").write_text(
@@ -71,10 +72,32 @@ def _write_run_fixture(base_dir: Path, run_id: str) -> None:
             f.write(json.dumps(req) + "\n")
 
 
+def _write_scenario_file(repo_root: Path) -> None:
+    scenarios_dir = repo_root / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+    scenario_yaml = """scenario_id: similar_books_smoke
+scenario_version: \"1.0\"
+schema_version: \"1.0.0\"
+traffic:
+  concurrency: 2
+  request_count: 2
+anchors:
+  anchor_count: 2
+validations:
+  status_code: 200
+  response_has_keys:
+    - similar_book_ids
+  no_duplicates: true
+  anchor_not_in_results: true
+"""
+    (scenarios_dir / "similar_books_smoke.yaml").write_text(scenario_yaml, encoding="utf-8")
+
+
 def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
     run_id = "run_eval_ok"
     base_dir = tmp_path / "artifacts" / "eval" / run_id
     _write_run_fixture(base_dir, run_id)
+    _write_scenario_file(tmp_path)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.argv", ["evaluator.py", "--run-id", run_id])
@@ -91,9 +114,13 @@ def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
     report_path = base_dir / "report" / "report.md"
     assert report_path.exists()
     report_content = report_path.read_text(encoding="utf-8")
-    assert "# Evaluation Report: similar_books_smoke" in report_content
-    assert "P95 Latency:** 30.0 ms" in report_content
-    assert "PASS**: No validation failures" in report_content
+    assert "## 1. Run Metadata Summary" in report_content
+    assert "## 2. Scenario Summary" in report_content
+    assert "- **Concurrency:** 2" in report_content
+    assert "- **Traffic Mode:** `request_count=2`" in report_content
+    assert "## 3. Correctness" in report_content
+    assert "## 4. Performance" in report_content
+    assert "## 5. Artifacts" in report_content
 
 
 def test_find_worst_latency_anchors_accepts_legacy_rows(tmp_path: Path) -> None:
@@ -115,3 +142,30 @@ def test_find_worst_latency_anchors_accepts_legacy_rows(tmp_path: Path) -> None:
     anchors = evaluator.find_worst_latency_anchors(raw_dir / "requests.jsonl")
     assert len(anchors) == 1
     assert anchors[0] == ("1", 100.0)
+
+
+def test_get_top_failing_anchors_is_deterministic_for_ties() -> None:
+    failures = [
+        {
+            "request_id": "req-1",
+            "anchor_id": "b",
+            "failure_type": "missing_key",
+            "status_code": 200,
+            "error_detail": "Missing key",
+            "latency_ms": 10.0,
+            "timestamp": "2026-02-26T00:00:00+00:00",
+        },
+        {
+            "request_id": "req-2",
+            "anchor_id": "a",
+            "failure_type": "missing_key",
+            "status_code": 200,
+            "error_detail": "Missing key",
+            "latency_ms": 11.0,
+            "timestamp": "2026-02-26T00:00:01+00:00",
+        },
+    ]
+    typed_failures = [evaluator.ValidationFailure(**failure) for failure in failures]
+
+    top = evaluator.get_top_failing_anchors(typed_failures, n=5)
+    assert top == [("a", 1), ("b", 1)]

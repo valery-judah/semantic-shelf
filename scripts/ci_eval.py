@@ -61,8 +61,8 @@ def main():
                 exit_code = 1
             else:
                 print("[CI] ✅ Gating PASSED. No regressions detected.")
-            
-            print(f"[CI] Artifacts:")
+
+            print("[CI] Artifacts:")
             print(f"[CI] - Report: artifacts/eval/{candidate_run_id}/report/report.md")
             print(f"[CI] - Summary: artifacts/eval/{candidate_run_id}/summary/summary.json")
             print(f"[CI] - Deltas: artifacts/eval/{candidate_run_id}/summary/deltas.json")
@@ -73,7 +73,7 @@ def main():
                 f"[CI] To promote this run as baseline, run: "
                 f"make promote-baseline SCENARIO={args.scenario} RUN_ID={candidate_run_id}"
             )
-            print(f"[CI] Artifacts:")
+            print("[CI] Artifacts:")
             print(f"[CI] - Report: artifacts/eval/{candidate_run_id}/report/report.md")
             print(f"[CI] - Summary: artifacts/eval/{candidate_run_id}/summary/summary.json")
 
