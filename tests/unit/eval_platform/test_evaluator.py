@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from eval import evaluator
 
 
@@ -262,3 +264,163 @@ def test_find_worst_latency_anchors_fails_on_malformed_row(tmp_path: Path) -> No
         assert "Invalid requests.jsonl line 2" in str(exc)
     else:
         raise AssertionError("Expected ValueError for malformed requests.jsonl row")
+
+
+def test_evaluator_outputs_are_byte_stable_across_repeated_runs(
+    monkeypatch, tmp_path: Path
+) -> None:
+    run_id = "run_eval_deterministic"
+    base_dir = tmp_path / "artifacts" / "eval" / run_id
+    raw_dir = base_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_scenario_file(tmp_path)
+
+    run_payload = {
+        "run_id": run_id,
+        "run_schema_version": "1.0",
+        "created_at": "2026-02-26T00:00:00+00:00",
+        "scenario_id": "similar_books_smoke",
+        "scenario_version": "1.0",
+        "dataset_id": "local_dev",
+        "seed": 42,
+        "anchor_count": 3,
+    }
+    (base_dir / "run.json").write_text(json.dumps(run_payload), encoding="utf-8")
+
+    anchors_payload = {
+        "anchors_schema_version": "1.0",
+        "run_id": run_id,
+        "scenario_id": "similar_books_smoke",
+        "dataset_id": "local_dev",
+        "seed": 42,
+        "anchors": ["a", "b", "c"],
+    }
+    (raw_dir / "anchors.json").write_text(json.dumps(anchors_payload), encoding="utf-8")
+
+    loadgen_results_payload = {
+        "schema_version": "1.0.0",
+        "total_requests": 6,
+        "passed_requests": 2,
+        "failed_requests": 4,
+        "status_code_distribution": {"200": 2, "500": 4},
+        "latency_ms": {"p50": 20.0, "p95": 100.0, "p99": 120.0},
+    }
+    (raw_dir / "loadgen_results.json").write_text(
+        json.dumps(loadgen_results_payload), encoding="utf-8"
+    )
+
+    failures_payload = [
+        {
+            "request_id": "req-a-1",
+            "anchor_id": "a",
+            "failure_type": "status_code_mismatch",
+            "status_code": 500,
+            "error_detail": "Status code mismatch",
+            "latency_ms": 100.0,
+            "timestamp": "2026-02-26T00:00:00+00:00",
+        },
+        {
+            "request_id": "req-b-1",
+            "anchor_id": "b",
+            "failure_type": "status_code_mismatch",
+            "status_code": 500,
+            "error_detail": "Status code mismatch",
+            "latency_ms": 100.0,
+            "timestamp": "2026-02-26T00:00:01+00:00",
+        },
+        {
+            "request_id": "req-a-2",
+            "anchor_id": "a",
+            "failure_type": "status_code_mismatch",
+            "status_code": 500,
+            "error_detail": "Status code mismatch",
+            "latency_ms": 30.0,
+            "timestamp": "2026-02-26T00:00:02+00:00",
+        },
+        {
+            "request_id": "req-b-2",
+            "anchor_id": "b",
+            "failure_type": "status_code_mismatch",
+            "status_code": 500,
+            "error_detail": "Status code mismatch",
+            "latency_ms": 30.0,
+            "timestamp": "2026-02-26T00:00:03+00:00",
+        },
+    ]
+    with (raw_dir / "validation_failures.jsonl").open("w", encoding="utf-8") as failures_file:
+        for failure in failures_payload:
+            failures_file.write(json.dumps(failure) + "\n")
+
+    requests_payload = [
+        {
+            "requests_schema_version": "1.0",
+            "run_id": run_id,
+            "request_id": "req-b-1",
+            "scenario_id": "similar_books_smoke",
+            "anchor_id": "b",
+            "status_code": 500,
+            "latency_ms": 100.0,
+            "passed": False,
+            "failure_type": "status_code_mismatch",
+            "timestamp": "2026-02-26T00:00:01+00:00",
+        },
+        {
+            "requests_schema_version": "1.0",
+            "run_id": run_id,
+            "request_id": "req-a-1",
+            "scenario_id": "similar_books_smoke",
+            "anchor_id": "a",
+            "status_code": 500,
+            "latency_ms": 100.0,
+            "passed": False,
+            "failure_type": "status_code_mismatch",
+            "timestamp": "2026-02-26T00:00:00+00:00",
+        },
+        {
+            "requests_schema_version": "1.0",
+            "run_id": run_id,
+            "request_id": "req-c-1",
+            "scenario_id": "similar_books_smoke",
+            "anchor_id": "c",
+            "status_code": 200,
+            "latency_ms": 100.0,
+            "passed": True,
+            "timestamp": "2026-02-26T00:00:04+00:00",
+        },
+    ]
+    with (raw_dir / "requests.jsonl").open("w", encoding="utf-8") as requests_file:
+        for request in requests_payload:
+            requests_file.write(json.dumps(request) + "\n")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["evaluator.py", "--run-id", run_id])
+    with pytest.raises(SystemExit) as exc_info:
+        evaluator.main()
+    assert exc_info.value.code == 1
+
+    summary_path = base_dir / "summary" / "summary.json"
+    report_path = base_dir / "report" / "report.md"
+
+    first_summary = summary_path.read_bytes()
+    first_report = report_path.read_text(encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        evaluator.main()
+    assert exc_info.value.code == 1
+
+    second_summary = summary_path.read_bytes()
+    second_report = report_path.read_text(encoding="utf-8")
+
+    assert first_summary == second_summary
+    assert first_report == second_report
+
+    assert "| `a` | 2 | `raw/sample_requests/a/req-a-1.json` |" in second_report
+    assert "| `b` | 2 | `raw/sample_requests/b/req-b-1.json` |" in second_report
+    assert second_report.index("| `a` | 2 |") < second_report.index("| `b` | 2 |")
+
+    assert "| `a` | 100.0 | `raw/sample_requests/a/req-a-1.json` |" in second_report
+    assert "| `b` | 100.0 | `raw/sample_requests/b/req-b-1.json` |" in second_report
+    assert "| `c` | 100.0 | `raw/sample_requests/c/req-c-1.json` |" in second_report
+    assert second_report.index("| `a` | 100.0 |") < second_report.index("| `b` | 100.0 |")
+    assert second_report.index("| `b` | 100.0 |") < second_report.index("| `c` | 100.0 |")
