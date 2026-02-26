@@ -78,6 +78,17 @@ def compare_runs(candidate_id: str, baseline_id: str) -> int:
     candidate_summary = load_summary(candidate_id)
     baseline_summary = load_summary(baseline_id)
     candidate_meta = load_metadata(candidate_id)
+    baseline_meta = load_metadata(baseline_id)
+
+    if baseline_meta.scenario_id != candidate_meta.scenario_id:
+        print(
+            "[ERROR] Baseline scenario mismatch: "
+            f"candidate(run_id={candidate_id}, scenario_id={candidate_meta.scenario_id}, "
+            f"scenario_version={candidate_meta.scenario_version}) vs "
+            f"baseline(run_id={baseline_id}, scenario_id={baseline_meta.scenario_id}, "
+            f"scenario_version={baseline_meta.scenario_version})"
+        )
+        return 1
 
     metrics = {}
     overall_status = "PASS"

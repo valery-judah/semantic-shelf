@@ -1,11 +1,17 @@
 import json
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 # Paths are relative to the workspace root
 ARTIFACTS_DIR = Path("artifacts")
 BASELINES_DIR = ARTIFACTS_DIR / "baselines"
+
+
+def scenario_to_env_suffix(scenario_id: str) -> str:
+    """Normalize a scenario identifier for environment-variable suffix usage."""
+    return re.sub(r"[^A-Z0-9]+", "_", scenario_id.upper()).strip("_")
 
 
 def resolve_baseline_run_id(scenario_id: str) -> str | None:
@@ -23,8 +29,14 @@ def resolve_baseline_run_id(scenario_id: str) -> str | None:
         The run_id of the baseline, or None if not found.
     """
     # 1. Check environment variable (useful for CI dynamic baselines)
-    env_var_name = f"EVAL_BASELINE_{scenario_id.upper()}"
+    normalized_suffix = scenario_to_env_suffix(scenario_id)
+    env_var_name = f"EVAL_BASELINE_{normalized_suffix}"
     if env_val := os.environ.get(env_var_name):
+        return env_val
+
+    # Backward compatibility for previously documented behavior.
+    legacy_env_var_name = f"EVAL_BASELINE_{scenario_id.upper()}"
+    if env_val := os.environ.get(legacy_env_var_name):
         return env_val
 
     # 2. Check local baseline pointer

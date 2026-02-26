@@ -17,6 +17,16 @@ def test_resolve_baseline_run_id_env_var(monkeypatch):
     assert resolve_baseline_run_id("my_scenario") == "run_env_123"
 
 
+def test_resolve_baseline_run_id_env_var_normalized(monkeypatch):
+    monkeypatch.setenv("EVAL_BASELINE_SIMILAR_BOOKS_V2", "run_env_norm")
+    assert resolve_baseline_run_id("similar-books.v2") == "run_env_norm"
+
+
+def test_resolve_baseline_run_id_env_var_legacy_fallback(monkeypatch):
+    monkeypatch.setenv("EVAL_BASELINE_SIMILAR-BOOKS.V2", "run_env_legacy")
+    assert resolve_baseline_run_id("similar-books.v2") == "run_env_legacy"
+
+
 def test_resolve_baseline_run_id_local_file(mock_artifacts_dir):
     mock_artifacts_dir.mkdir(parents=True, exist_ok=True)
     baseline_file = mock_artifacts_dir / "my_scenario.json"
