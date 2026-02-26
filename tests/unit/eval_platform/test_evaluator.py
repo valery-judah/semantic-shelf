@@ -121,9 +121,11 @@ def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
     assert "## 3. Correctness" in report_content
     assert "## 4. Performance" in report_content
     assert "## 5. Artifacts" in report_content
+    assert "## 6. How to reproduce" in report_content
+    assert f"uv run python eval/evaluator.py --run-id {run_id}" in report_content
 
 
-def test_find_worst_latency_anchors_accepts_legacy_rows(tmp_path: Path) -> None:
+def test_find_worst_latency_anchors_rejects_legacy_rows(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     legacy_row = {
@@ -139,9 +141,12 @@ def test_find_worst_latency_anchors_accepts_legacy_rows(tmp_path: Path) -> None:
     }
     (raw_dir / "requests.jsonl").write_text(json.dumps(legacy_row) + "\n", encoding="utf-8")
 
-    anchors = evaluator.find_worst_latency_anchors(raw_dir / "requests.jsonl")
-    assert len(anchors) == 1
-    assert anchors[0] == ("1", 100.0)
+    try:
+        evaluator.find_worst_latency_anchors(raw_dir / "requests.jsonl")
+    except ValueError as exc:
+        assert "Unsupported requests.jsonl schema_version on line 1" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for legacy requests row schema version")
 
 
 def test_get_top_failing_anchors_is_deterministic_for_ties() -> None:
@@ -169,3 +174,91 @@ def test_get_top_failing_anchors_is_deterministic_for_ties() -> None:
 
     top = evaluator.get_top_failing_anchors(typed_failures, n=5)
     assert top == [("a", 1), ("b", 1)]
+
+
+def test_load_loadgen_results_rejects_unsupported_schema_version(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": "9.9.9",
+        "total_requests": 1,
+        "passed_requests": 1,
+        "failed_requests": 0,
+        "status_code_distribution": {"200": 1},
+        "latency_ms": {"p50": 10.0, "p95": 10.0, "p99": 10.0},
+    }
+    (raw_dir / "loadgen_results.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        evaluator.load_loadgen_results(raw_dir)
+    except ValueError as exc:
+        assert "Unsupported loadgen_results schema_version" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for unsupported schema version")
+
+
+def test_load_run_metadata_rejects_unsupported_schema_version(tmp_path: Path) -> None:
+    run_payload = {
+        "run_id": "run_bad",
+        "run_schema_version": "9.0",
+        "created_at": "2026-02-26T00:00:00+00:00",
+        "scenario_id": "similar_books_smoke",
+        "scenario_version": "1.0",
+        "dataset_id": "local_dev",
+        "seed": 42,
+        "anchor_count": 2,
+    }
+    (tmp_path / "run.json").write_text(json.dumps(run_payload), encoding="utf-8")
+
+    try:
+        evaluator.load_run_metadata(tmp_path)
+    except ValueError as exc:
+        assert "Unsupported run.json run_schema_version" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for unsupported run schema version")
+
+
+def test_load_anchors_rejects_unsupported_schema_version(tmp_path: Path) -> None:
+    payload = {
+        "anchors_schema_version": "2.0",
+        "run_id": "run_bad",
+        "scenario_id": "similar_books_smoke",
+        "dataset_id": "local_dev",
+        "seed": 42,
+        "anchors": ["1"],
+    }
+    (tmp_path / "anchors.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        evaluator.load_anchors(tmp_path)
+    except ValueError as exc:
+        assert "Unsupported anchors.json anchors_schema_version" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for unsupported anchors schema version")
+
+
+def test_find_worst_latency_anchors_fails_on_malformed_row(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    valid_row = {
+        "requests_schema_version": "1.0",
+        "run_id": "run_bad",
+        "request_id": "req-1",
+        "scenario_id": "similar_books_smoke",
+        "anchor_id": "1",
+        "status_code": 200,
+        "latency_ms": 11.0,
+        "passed": True,
+        "timestamp": "2026-02-26T00:00:00+00:00",
+    }
+    malformed = "{bad-json"
+    (raw_dir / "requests.jsonl").write_text(
+        json.dumps(valid_row) + "\n" + malformed + "\n", encoding="utf-8"
+    )
+
+    try:
+        evaluator.find_worst_latency_anchors(raw_dir / "requests.jsonl")
+    except ValueError as exc:
+        assert "Invalid requests.jsonl line 2" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for malformed requests.jsonl row")
