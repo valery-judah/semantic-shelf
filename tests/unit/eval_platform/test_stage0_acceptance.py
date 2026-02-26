@@ -58,12 +58,21 @@ def test_run_directory_has_schema_valid_run_and_summary(
     monkeypatch.setenv("EVAL_DATASET_ID", "local_dev")
     monkeypatch.setenv("EVAL_ANCHOR_COUNT", "2")
 
-    def fake_get(*args: object, **kwargs: object) -> _FakeResponse:
-        return _FakeResponse(status_code=200)
-
-    monkeypatch.setattr(eval_orchestrator.httpx, "get", fake_get)
-
     eval_orchestrator.main()
+
+    # Simulate loadgen output
+    raw_dir = tmp_path / "artifacts" / "eval" / run_id / "raw"
+    loadgen_results_payload = {
+        "schema_version": "1.0.0",
+        "total_requests": 2,
+        "passed_requests": 2,
+        "failed_requests": 0,
+        "latency_ms": {"p50": 10.0, "p95": 20.0, "p99": 30.0},
+    }
+    (raw_dir / "loadgen_results.json").write_text(
+        json.dumps(loadgen_results_payload), encoding="utf-8"
+    )
+    (raw_dir / "validation_failures.jsonl").write_text("", encoding="utf-8")
 
     monkeypatch.setattr("sys.argv", ["evaluator.py", "--run-id", run_id])
     evaluator.main()

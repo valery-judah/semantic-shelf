@@ -1,0 +1,14 @@
+scenario_id: "similar_books_smoke"
+scenario_version: "1.0"
+schema_version: "1.0.0"
+traffic:
+  concurrency: 5
+  request_count: 50
+anchors:
+  anchor_count: 50
+validations:
+  status_code: 200
+  response_has_keys:
+    - "similar_book_ids"
+  no_duplicates: true
+  anchor_not_in_results: true

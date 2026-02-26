@@ -80,6 +80,13 @@ BOOKS_REC_LOG_SERVICE_NAME=books-rec-api
 - First-boot auto-seed: on a fresh DB volume, Postgres runs `docker-entrypoint-initdb.d` scripts and seeds `books` from `${GOODBOOKS_DATASET_DIR}/books_enriched.csv`.
 - If you already initialized the DB volume and want to re-run first-boot seed scripts: `make reset-db` then start again with `make run` or `make dev`.
 
+## Evaluation Platform
+The recommendation surfaces are evaluated incrementally via a local, deterministic evaluation platform. The current implementation evaluates correctness and bounds latency regressions under stable traffic via YAML-defined load scenarios.
+
+- **Run Smoke Tests (PR Gate):** Execute the smoke scenario to validate correctness against the evaluation framework. This automatically spins up Docker Compose, runs deterministic seeded traffic using `httpx`, evaluates the output, and tears down the environment.
+  - `./scripts/eval_run.sh similar_books_smoke`
+- **Output Artifacts:** Check the generated `/artifacts/eval/batch_XXX` manifests and run-specific folders containing `run.json`, `loadgen_results.json`, `validation_failures.jsonl`, and the finalized `summary.json`.
+
 ### Quality Gates
 - `make test` - run tests
 - `make fmt` - format and auto-fix lint

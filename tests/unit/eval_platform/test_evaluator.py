@@ -30,32 +30,17 @@ def _write_run_fixture(base_dir: Path, run_id: str) -> None:
     }
     (raw_dir / "anchors.json").write_text(json.dumps(anchors_payload), encoding="utf-8")
 
-    req1 = {
-        "run_id": run_id,
-        "request_id": "req_1",
-        "scenario_id": "similar_books_smoke",
-        "anchor_id": "1",
-        "method": "GET",
-        "path": "/books/1/similar?limit=5",
-        "status_code": 200,
-        "latency_ms": 12.0,
-        "timestamp": "2026-02-26T00:00:01+00:00",
+    loadgen_results_payload = {
+        "schema_version": "1.0.0",
+        "total_requests": 2,
+        "passed_requests": 2,
+        "failed_requests": 0,
+        "latency_ms": {"p50": 12.0, "p95": 30.0, "p99": 30.0},
     }
-    req2 = {
-        "run_id": run_id,
-        "request_id": "req_2",
-        "scenario_id": "similar_books_smoke",
-        "anchor_id": "2",
-        "method": "GET",
-        "path": "/books/2/similar?limit=5",
-        "status_code": 404,
-        "latency_ms": 30.0,
-        "timestamp": "2026-02-26T00:00:02+00:00",
-    }
-    (raw_dir / "requests.jsonl").write_text(
-        json.dumps(req1) + "\n" + json.dumps(req2) + "\n",
-        encoding="utf-8",
+    (raw_dir / "loadgen_results.json").write_text(
+        json.dumps(loadgen_results_payload), encoding="utf-8"
     )
+    (raw_dir / "validation_failures.jsonl").write_text("", encoding="utf-8")
 
 
 def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
@@ -73,4 +58,4 @@ def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["run_id"] == run_id
     assert summary["counts"]["total_requests"] == 2
-    assert summary["counts"]["failed_requests"] == 1
+    assert summary["counts"]["failed_requests"] == 0

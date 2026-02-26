@@ -12,6 +12,9 @@ class EvaluationCounts(BaseModel):
     correctness_failures: int = Field(
         0, ge=0, description="Number of requests that failed validation invariants."
     )
+    failures_by_type: dict[str, int] = Field(
+        default_factory=dict, description="Breakdown of failures by type."
+    )
 
 
 class LatencyMetrics(BaseModel):

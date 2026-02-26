@@ -6,11 +6,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
 from pydantic import ValidationError
 
 from eval.anchors import AnchorSelectionInputs, select_anchors
-from eval.schemas.raw import AnchorSelection, RequestRecord
+from eval.schemas.raw import AnchorSelection
 from eval.schemas.run import RunMetadata
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -97,68 +96,6 @@ def write_anchor_selection(ctx: RunContext, anchors: list[str]) -> None:
     anchors_path.write_text(selection.model_dump_json(indent=2), encoding="utf-8")
 
 
-def call_anchor(ctx: RunContext, anchor_id: str) -> RequestRecord:
-    request_id = f"req-{uuid.uuid4().hex[:12]}"
-    path = f"/books/{anchor_id}/similar?limit=5"
-    started = datetime.now(UTC)
-
-    response = httpx.get(
-        f"{ctx.api_url}{path}",
-        headers={
-            "X-Eval-Run-Id": ctx.run_id,
-            "X-Request-Id": request_id,
-            "X-Eval-Scenario-Id": ctx.scenario_id,
-        },
-        timeout=5.0,
-    )
-
-    latency_ms = max((datetime.now(UTC) - started).total_seconds() * 1000, 0.0)
-
-    return RequestRecord(
-        run_id=ctx.run_id,
-        request_id=request_id,
-        scenario_id=ctx.scenario_id,
-        anchor_id=anchor_id,
-        method="GET",
-        path=path,
-        status_code=response.status_code,
-        latency_ms=latency_ms,
-        timestamp=started,
-    )
-
-
-def write_request_records(ctx: RunContext, records: list[RequestRecord]) -> None:
-    requests_path = ctx.raw_dir / "requests.jsonl"
-    with requests_path.open("w", encoding="utf-8") as f:
-        for record in records:
-            f.write(record.model_dump_json())
-            f.write("\n")
-
-
-def run_requests(ctx: RunContext, anchors: list[str]) -> None:
-    records: list[RequestRecord] = []
-    for anchor_id in anchors:
-        try:
-            record = call_anchor(ctx, anchor_id)
-            records.append(record)
-            logger.info(
-                (
-                    "Eval request completed run_id=%s request_id=%s "
-                    "anchor_id=%s status=%s latency_ms=%.2f"
-                ),
-                record.run_id,
-                record.request_id,
-                record.anchor_id,
-                record.status_code,
-                record.latency_ms,
-            )
-        except httpx.RequestError as exc:
-            logger.error("Network error for anchor_id=%s: %s", anchor_id, exc)
-            raise
-
-    write_request_records(ctx, records)
-
-
 def main() -> None:
     try:
         ctx = build_context()
@@ -174,12 +111,8 @@ def main() -> None:
             )
         )
         write_anchor_selection(ctx, anchors)
-        run_requests(ctx, anchors)
     except (ValidationError, ValueError) as exc:
         logger.error("Failed to build valid evaluation artifacts: %s", exc)
-        sys.exit(1)
-    except httpx.RequestError as exc:
-        logger.error("Orchestrator failed because requests were unsuccessful: %s", exc)
         sys.exit(1)
 
     logger.info("Orchestrator finished for run_id=%s", ctx.run_id)

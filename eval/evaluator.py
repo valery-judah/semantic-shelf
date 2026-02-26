@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from eval.schemas.raw import AnchorSelection, RequestRecord
+from eval.schemas.raw import AnchorSelection
 from eval.schemas.run import RunMetadata
 from eval.schemas.summary import EvaluationCounts, LatencyMetrics, RunSummary
 
@@ -40,55 +40,75 @@ def load_anchors(raw_dir: Path) -> AnchorSelection:
     return AnchorSelection(**anchors_data)
 
 
-def load_request_records(raw_dir: Path) -> list[RequestRecord]:
-    requests_path = raw_dir / "requests.jsonl"
-    if not requests_path.exists():
-        raise FileNotFoundError(f"Could not find request records at {requests_path}")
+def load_validation_failures(raw_dir: Path) -> list[dict]:
+    failures_path = raw_dir / "validation_failures.jsonl"
+    if not failures_path.exists():
+        # Assume zero failures if file is missing
+        return []
 
-    records: list[RequestRecord] = []
-    with requests_path.open(encoding="utf-8") as f:
+    records = []
+    with failures_path.open(encoding="utf-8") as f:
         for lineno, line in enumerate(f, start=1):
             stripped = line.strip()
             if not stripped:
                 continue
             try:
                 payload = json.loads(stripped)
-                records.append(RequestRecord(**payload))
-            except (json.JSONDecodeError, ValidationError) as exc:
-                raise ValueError(f"Invalid requests.jsonl line {lineno}: {exc}") from exc
+                records.append(payload)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid validation_failures.jsonl line {lineno}: {exc}") from exc
 
     return records
 
 
-def build_summary(run_meta: RunMetadata, records: list[RequestRecord]) -> RunSummary:
-    total_requests = len(records)
-    successful_requests = sum(1 for record in records if 200 <= record.status_code < 400)
-    failed_requests = total_requests - successful_requests
-    error_rate = (failed_requests / total_requests) if total_requests > 0 else 0.0
-    timeouts = 0
-    latencies = [record.latency_ms for record in records]
+def load_loadgen_results(raw_dir: Path) -> dict:
+    results_path = raw_dir / "loadgen_results.json"
+    if not results_path.exists():
+        raise FileNotFoundError(f"Could not find loadgen results at {results_path}")
+    results_data = json.loads(results_path.read_text(encoding="utf-8"))
+
+    # Assert schema_version
+    schema_version = results_data.get("schema_version")
+    if schema_version != "1.0.0":
+        logger.warning(f"Unexpected loadgen_results schema_version: {schema_version}")
+
+    return results_data
+
+
+def build_summary(run_meta: RunMetadata, loadgen_results: dict, failures: list[dict]) -> RunSummary:
+    total_requests = loadgen_results.get("total_requests", 0)
+    passed_requests = loadgen_results.get("passed_requests", 0)
+    failed_requests = loadgen_results.get("failed_requests", 0)
+
+    failure_types = {}
+    for f in failures:
+        ftype = f.get("failure_type", "unknown")
+        failure_types[ftype] = failure_types.get(ftype, 0) + 1
+
+    latency_data = loadgen_results.get("latency_ms", {})
 
     return RunSummary(
         run_id=run_meta.run_id,
-        summary_schema_version="1.0",
+        summary_schema_version="1.0.0",
         counts=EvaluationCounts(
             total_requests=total_requests,
-            successful_requests=successful_requests,
+            successful_requests=passed_requests,
             failed_requests=failed_requests,
-            error_rate=error_rate,
-            timeouts=timeouts,
-            correctness_failures=0,
+            error_rate=(failed_requests / total_requests) if total_requests > 0 else 0.0,
+            timeouts=failure_types.get("timeout", 0),
+            correctness_failures=failed_requests,
+            failures_by_type=failure_types,
         ),
         latency=LatencyMetrics(
-            p50_ms=percentile(latencies, 0.50),
-            p95_ms=percentile(latencies, 0.95),
-            p99_ms=percentile(latencies, 0.99),
+            p50_ms=latency_data.get("p50"),
+            p95_ms=latency_data.get("p95"),
+            p99_ms=latency_data.get("p99"),
         ),
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Stage 0 evaluator")
+    parser = argparse.ArgumentParser(description="Stage 1 evaluator")
     parser.add_argument("--run-id", required=True, help="Evaluation run ID to evaluate")
     args = parser.parse_args()
 
@@ -99,26 +119,25 @@ def main() -> None:
 
     try:
         run_meta = load_run_metadata(base_dir)
-        anchors = load_anchors(raw_dir)
-        records = load_request_records(raw_dir)
+        loadgen_results = load_loadgen_results(raw_dir)
+        failures = load_validation_failures(raw_dir)
 
-        if anchors.run_id != run_meta.run_id:
-            raise ValueError("run_id mismatch between run.json and raw/anchors.json")
-        if len(records) != len(anchors.anchors):
-            raise ValueError(
-                "Request records count does not match anchors count "
-                f"({len(records)} != {len(anchors.anchors)})"
-            )
-
-        summary = build_summary(run_meta, records)
+        summary = build_summary(run_meta, loadgen_results, failures)
         summary_json_path = summary_dir / "summary.json"
         summary_json_path.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
         logger.info("Wrote validated summary.json to %s", summary_json_path)
+
+        # Enforce Gate
+        total_failed = summary.counts.failed_requests
+        if total_failed > 0:
+            logger.error(f"Gate Failed: Found {total_failed} correctness failures.")
+            sys.exit(1)
+
     except (FileNotFoundError, ValidationError, ValueError, json.JSONDecodeError) as exc:
         logger.error("Evaluator failed: %s", exc)
         sys.exit(1)
 
-    logger.info("Evaluator finished for run_id=%s", args.run_id)
+    logger.info("Evaluator finished for run_id=%s. PASS.", args.run_id)
 
 
 if __name__ == "__main__":

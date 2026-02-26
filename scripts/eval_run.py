@@ -2,6 +2,9 @@ import argparse
 import os
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 import uuid
 from dataclasses import dataclass
 
@@ -27,8 +30,26 @@ def run_command(cmd: list[str], env: dict[str, str] | None = None) -> None:
     subprocess.run(cmd, env=env, check=True)
 
 
+def wait_for_api() -> None:
+    print("[INFO] Waiting for API to become healthy...")
+    max_retries = 30
+    for _ in range(max_retries):
+        try:
+            req = urllib.request.Request("http://localhost:8000/docs", method="HEAD")
+            with urllib.request.urlopen(req, timeout=1) as response:
+                if response.status == 200:
+                    print("[INFO] API is healthy and ready!")
+                    return
+        except Exception:
+            pass
+        time.sleep(2)
+    print("[ERROR] API failed to become healthy in time.")
+    sys.exit(1)
+
+
 def start_environment() -> None:
     run_command(["docker", "compose", "up", "-d", "--build"])
+    wait_for_api()
 
 
 def stop_environment() -> None:
@@ -54,6 +75,7 @@ def run_scenario(
     )
 
     run_command(["uv", "run", "python", "scripts/eval_orchestrator.py"], env=env)
+    run_command(["uv", "run", "python", "eval/loadgen.py"], env=env)
     run_command(["uv", "run", "python", "eval/evaluator.py", "--run-id", run_id], env=env)
     return ScenarioRun(scenario=scenario, run_id=run_id)
 
