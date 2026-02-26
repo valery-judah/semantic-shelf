@@ -424,3 +424,152 @@ def test_evaluator_outputs_are_byte_stable_across_repeated_runs(
     assert "| `c` | 100.0 | `raw/sample_requests/c/req-c-1.json` |" in second_report
     assert second_report.index("| `a` | 100.0 |") < second_report.index("| `b` | 100.0 |")
     assert second_report.index("| `b` | 100.0 |") < second_report.index("| `c` | 100.0 |")
+
+
+def test_extract_debug_bundles_respects_per_anchor_cap(tmp_path: Path) -> None:
+    run_id = "run_cap"
+    base_dir = tmp_path / "artifacts" / "eval" / run_id
+    raw_dir = base_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    requests_path = raw_dir / "requests.jsonl"
+
+    rows = [
+        {
+            "requests_schema_version": "1.0",
+            "run_id": run_id,
+            "request_id": f"req-a-{idx}",
+            "scenario_id": "similar_books_smoke",
+            "anchor_id": "a",
+            "status_code": 500,
+            "latency_ms": 10.0 + idx,
+            "passed": False,
+            "failure_type": "status_code_mismatch",
+            "timestamp": f"2026-02-26T00:00:0{idx}+00:00",
+        }
+        for idx in range(3)
+    ]
+    with requests_path.open("w", encoding="utf-8") as requests_file:
+        for row in rows:
+            requests_file.write(json.dumps(row) + "\n")
+
+    debug_files = evaluator.extract_debug_bundles(
+        requests_path=requests_path,
+        base_dir=base_dir,
+        target_anchors={"a"},
+        limit_per_anchor=2,
+    )
+
+    assert debug_files == [
+        "raw/sample_requests/a/req-a-0.json",
+        "raw/sample_requests/a/req-a-1.json",
+    ]
+
+
+def test_extract_debug_bundles_does_not_overwrite_same_anchor_request_id(tmp_path: Path) -> None:
+    run_id = "run_no_overwrite"
+    base_dir = tmp_path / "artifacts" / "eval" / run_id
+    raw_dir = base_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    requests_path = raw_dir / "requests.jsonl"
+
+    duplicate_rows = [
+        {
+            "requests_schema_version": "1.0",
+            "run_id": run_id,
+            "request_id": "req-dup",
+            "scenario_id": "similar_books_smoke",
+            "anchor_id": "a",
+            "status_code": 500,
+            "latency_ms": 10.0,
+            "passed": False,
+            "failure_type": "status_code_mismatch",
+            "timestamp": "2026-02-26T00:00:00+00:00",
+        },
+        {
+            "requests_schema_version": "1.0",
+            "run_id": run_id,
+            "request_id": "req-dup",
+            "scenario_id": "similar_books_smoke",
+            "anchor_id": "a",
+            "status_code": 500,
+            "latency_ms": 20.0,
+            "passed": False,
+            "failure_type": "status_code_mismatch",
+            "timestamp": "2026-02-26T00:00:01+00:00",
+        },
+    ]
+    with requests_path.open("w", encoding="utf-8") as requests_file:
+        for row in duplicate_rows:
+            requests_file.write(json.dumps(row) + "\n")
+
+    debug_files = evaluator.extract_debug_bundles(
+        requests_path=requests_path,
+        base_dir=base_dir,
+        target_anchors={"a"},
+        limit_per_anchor=10,
+    )
+
+    assert debug_files == [
+        "raw/sample_requests/a/req-dup.json",
+        "raw/sample_requests/a/req-dup__2.json",
+    ]
+
+
+def test_report_includes_debug_pointer_for_each_listed_anchor() -> None:
+    run_meta = evaluator.RunMetadata(
+        run_id="run_pointer_complete",
+        run_schema_version="1.0",
+        created_at="2026-02-26T00:00:00+00:00",
+        scenario_id="similar_books_smoke",
+        scenario_version="1.0",
+        dataset_id="local_dev",
+        seed=42,
+        anchor_count=3,
+    )
+    anchors = evaluator.AnchorSelection(
+        anchors_schema_version="1.0",
+        run_id="run_pointer_complete",
+        scenario_id="similar_books_smoke",
+        dataset_id="local_dev",
+        seed=42,
+        anchors=["a", "b", "c"],
+    )
+    summary = evaluator.RunSummary.model_validate(
+        {
+            "run_id": "run_pointer_complete",
+            "counts": {
+                "total_requests": 3,
+                "successful_requests": 0,
+                "failed_requests": 3,
+                "error_rate": 1.0,
+                "correctness_failures": 3,
+                "failures_by_type": {"status_code_mismatch": 3},
+                "status_code_distribution": {"500": 3},
+            },
+            "latency": {"p50_ms": 50.0, "p95_ms": 60.0, "p99_ms": 70.0},
+        }
+    )
+
+    top_failures = [("a", 2), ("b", 1)]
+    worst_latency = [("a", 120.0), ("b", 110.0), ("c", 100.0)]
+    debug_files = [
+        "raw/sample_requests/a/req-a-1.json",
+        "raw/sample_requests/b/req-b-1.json",
+        "raw/sample_requests/c/req-c-1.json",
+    ]
+
+    report = evaluator.generate_report(
+        run_meta=run_meta,
+        scenario_config=None,
+        anchors=anchors,
+        summary=summary,
+        top_failures=top_failures,
+        worst_latency=worst_latency,
+        debug_files=debug_files,
+    )
+
+    assert "| `a` | 2 | `raw/sample_requests/a/req-a-1.json` |" in report
+    assert "| `b` | 1 | `raw/sample_requests/b/req-b-1.json` |" in report
+    assert "| `a` | 120.0 | `raw/sample_requests/a/req-a-1.json` |" in report
+    assert "| `b` | 110.0 | `raw/sample_requests/b/req-b-1.json` |" in report
+    assert "| `c` | 100.0 | `raw/sample_requests/c/req-c-1.json` |" in report
