@@ -87,7 +87,7 @@ def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
     assert summary["run_id"] == run_id
     assert summary["counts"]["total_requests"] == 2
     assert summary["counts"]["failed_requests"] == 0
-    
+
     report_path = base_dir / "report" / "report.md"
     assert report_path.exists()
     report_content = report_path.read_text(encoding="utf-8")

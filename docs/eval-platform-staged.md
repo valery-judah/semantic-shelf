@@ -329,10 +329,10 @@ Soft gates (warn only):
 
 ### Implementation checklist
 
-- [ ] baseline retrieval mechanism in CI
-- [ ] diff logic + unit tests
-- [ ] CI job artifacts upload + report link
-- [ ] documented thresholds and rationale
+- [x] baseline retrieval mechanism in CI
+- [x] diff logic + unit tests
+- [x] CI job artifacts upload + report link
+- [x] documented thresholds and rationale
 
 ### Risks and mitigations
 

@@ -1,6 +1,4 @@
-import asyncio
 import json
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -9,6 +7,7 @@ from httpx import Response
 
 from eval.loadgen import execute_request, run_load
 from eval.schemas.scenario import ScenarioConfig
+
 
 @pytest.fixture
 def mock_scenario_config() -> ScenarioConfig:
@@ -23,17 +22,15 @@ def mock_scenario_config() -> ScenarioConfig:
             "response_has_keys": ["similar_book_ids"],
             "no_duplicates": True,
             "anchor_not_in_results": True,
-        }
+        },
     )
+
 
 @pytest.mark.asyncio
 async def test_execute_request_success(mock_scenario_config):
     mock_client = MagicMock(spec=httpx.AsyncClient)
-    
-    mock_response = Response(
-        status_code=200,
-        json={"similar_book_ids": ["2", "3"]}
-    )
+
+    mock_response = Response(status_code=200, json={"similar_book_ids": ["2", "3"]})
     mock_client.get = AsyncMock(return_value=mock_response)
 
     res, fail = await execute_request(
@@ -47,14 +44,12 @@ async def test_execute_request_success(mock_scenario_config):
     assert res.response_body is None
     assert fail is None
 
+
 @pytest.mark.asyncio
 async def test_execute_request_status_mismatch(mock_scenario_config):
     mock_client = MagicMock(spec=httpx.AsyncClient)
-    
-    mock_response = Response(
-        status_code=404,
-        json={}
-    )
+
+    mock_response = Response(status_code=404, json={})
     mock_client.get = AsyncMock(return_value=mock_response)
 
     res, fail = await execute_request(
@@ -68,14 +63,12 @@ async def test_execute_request_status_mismatch(mock_scenario_config):
     assert fail.error_detail is not None
     assert "Expected 200" in fail.error_detail
 
+
 @pytest.mark.asyncio
 async def test_execute_request_missing_key(mock_scenario_config):
     mock_client = MagicMock(spec=httpx.AsyncClient)
-    
-    mock_response = Response(
-        status_code=200,
-        json={"wrong_key": ["2", "3"]}
-    )
+
+    mock_response = Response(status_code=200, json={"wrong_key": ["2", "3"]})
     mock_client.get = AsyncMock(return_value=mock_response)
 
     res, fail = await execute_request(
@@ -88,14 +81,12 @@ async def test_execute_request_missing_key(mock_scenario_config):
     assert fail.error_detail is not None
     assert "Missing key: similar_book_ids" in fail.error_detail
 
+
 @pytest.mark.asyncio
 async def test_execute_request_duplicate_ids(mock_scenario_config):
     mock_client = MagicMock(spec=httpx.AsyncClient)
-    
-    mock_response = Response(
-        status_code=200,
-        json={"similar_book_ids": ["2", "2"]}
-    )
+
+    mock_response = Response(status_code=200, json={"similar_book_ids": ["2", "2"]})
     mock_client.get = AsyncMock(return_value=mock_response)
 
     res, fail = await execute_request(
@@ -106,14 +97,12 @@ async def test_execute_request_duplicate_ids(mock_scenario_config):
     assert fail is not None
     assert fail.failure_type == "duplicate_ids"
 
+
 @pytest.mark.asyncio
 async def test_execute_request_anchor_in_results(mock_scenario_config):
     mock_client = MagicMock(spec=httpx.AsyncClient)
-    
-    mock_response = Response(
-        status_code=200,
-        json={"similar_book_ids": ["1", "2"]}
-    )
+
+    mock_response = Response(status_code=200, json={"similar_book_ids": ["1", "2"]})
     mock_client.get = AsyncMock(return_value=mock_response)
 
     res, fail = await execute_request(
@@ -124,14 +113,12 @@ async def test_execute_request_anchor_in_results(mock_scenario_config):
     assert fail is not None
     assert fail.failure_type == "anchor_in_results"
 
+
 @pytest.mark.asyncio
 async def test_execute_request_invalid_json(mock_scenario_config):
     mock_client = MagicMock(spec=httpx.AsyncClient)
-    
-    mock_response = Response(
-        status_code=200,
-        text="not json"
-    )
+
+    mock_response = Response(status_code=200, text="not json")
     mock_client.get = AsyncMock(return_value=mock_response)
 
     res, fail = await execute_request(
@@ -141,6 +128,7 @@ async def test_execute_request_invalid_json(mock_scenario_config):
     assert res.passed is False
     assert fail is not None
     assert fail.failure_type == "invalid_json"
+
 
 @pytest.mark.asyncio
 async def test_execute_request_timeout(mock_scenario_config):
@@ -156,12 +144,13 @@ async def test_execute_request_timeout(mock_scenario_config):
     assert fail.failure_type == "timeout"
     assert res.status_code is None
 
+
 @pytest.mark.asyncio
 async def test_run_load(tmp_path, mock_scenario_config):
     results_path = tmp_path / "loadgen_results.json"
     failures_path = tmp_path / "validation_failures.jsonl"
     requests_path = tmp_path / "requests.jsonl"
-    
+
     async def mock_execute_request(client, api_url, anchor_id, run_id, scenario_config):
         res = {
             "requests_schema_version": "1.0",
@@ -179,12 +168,20 @@ async def test_run_load(tmp_path, mock_scenario_config):
         return res, None
 
     with patch("eval.loadgen.execute_request", new=mock_execute_request):
-        await run_load("run_123", "http://test", mock_scenario_config, ["1", "2"], str(results_path), str(failures_path), str(requests_path))
-        
+        await run_load(
+            "run_123",
+            "http://test",
+            mock_scenario_config,
+            ["1", "2"],
+            str(results_path),
+            str(failures_path),
+            str(requests_path),
+        )
+
     assert results_path.exists()
     assert failures_path.exists()
     assert requests_path.exists()
-    
+
     with open(results_path) as f:
         results = json.load(f)
         assert results["total_requests"] == 2

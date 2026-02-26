@@ -11,7 +11,6 @@ from pydantic import ValidationError
 from eval.schemas.raw import (
     AnchorSelection,
     LoadgenResults,
-    RequestRecord,
     ValidationFailure,
 )
 from eval.schemas.run import RunMetadata
@@ -117,9 +116,7 @@ def build_summary(
     )
 
 
-def get_top_failing_anchors(
-    failures: list[ValidationFailure], n: int = 5
-) -> list[tuple[str, int]]:
+def get_top_failing_anchors(failures: list[ValidationFailure], n: int = 5) -> list[tuple[str, int]]:
     anchor_counts = Counter(f.anchor_id for f in failures)
     return anchor_counts.most_common(n)
 
@@ -129,7 +126,7 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
         return []
 
     anchor_max_latency = defaultdict(float)
-    
+
     with requests_path.open(encoding="utf-8") as f:
         for line in f:
             stripped = line.strip()
@@ -147,7 +144,7 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
                         anchor_max_latency[aid] = lat
             except (json.JSONDecodeError, ValueError):
                 continue
-    
+
     sorted_anchors = sorted(anchor_max_latency.items(), key=lambda x: x[1], reverse=True)
     return sorted_anchors[:n]
 
@@ -161,16 +158,16 @@ def extract_debug_bundles(
 
     sample_dir = base_dir / "raw" / "sample_requests"
     written_files = []
-    
+
     # Track counts per anchor to enforce limit
     anchor_counts = defaultdict(int)
-    
+
     with requests_path.open(encoding="utf-8") as f:
         for line in f:
             # Check if we have collected enough for all targets
             if not target_anchors:
                 break
-                
+
             stripped = line.strip()
             if not stripped:
                 continue
@@ -178,23 +175,23 @@ def extract_debug_bundles(
                 data = json.loads(stripped)
                 aid = data.get("anchor_id")
                 rid = data.get("request_id")
-                
+
                 if aid in target_anchors:
                     if anchor_counts[aid] < limit_per_anchor:
                         anchor_dir = sample_dir / aid
                         anchor_dir.mkdir(parents=True, exist_ok=True)
-                        
+
                         file_path = anchor_dir / f"{rid}.json"
-                        # Re-dump to ensure pretty print or just write raw? 
+                        # Re-dump to ensure pretty print or just write raw?
                         # User code used model_dump_json(indent=2).
                         # We can just use json.dump
                         file_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
                         written_files.append(str(file_path.relative_to(base_dir)))
-                        
+
                         anchor_counts[aid] += 1
-                        
-                        # Optimization: if we filled this anchor, remove from targets to stop checking?
-                        # No, because we might re-enable it? No, once we hit limit we are done for that anchor.
+
+                        # Optimization: if we filled this anchor, stop checking?
+                        # No, once we hit limit we are done for that anchor.
                         if anchor_counts[aid] >= limit_per_anchor:
                             target_anchors.remove(aid)
             except (json.JSONDecodeError, ValueError):
@@ -219,7 +216,7 @@ def generate_report(
     lines.append("## 1. Summary")
     lines.append(f"- **Total Requests:** {summary.counts.total_requests}")
     lines.append(f"- **Success Rate:** {100 * (1 - summary.counts.error_rate):.1f}%")
-    
+
     p95 = summary.latency.p95_ms
     p95_str = f"{p95} ms" if p95 is not None else "N/A"
     lines.append(f"- **P95 Latency:** {p95_str}")
@@ -234,7 +231,7 @@ def generate_report(
         lines.append("### Failure Breakdown")
         for ftype, count in summary.counts.failures_by_type.items():
             lines.append(f"- `{ftype}`: {count}")
-        
+
         lines.append("")
         lines.append("### Top Failing Anchors")
         lines.append("| Anchor ID | Failure Count | Debug Samples |")
@@ -249,7 +246,7 @@ def generate_report(
     lines.append("## 3. Performance")
     lines.append("| Metric | Value |")
     lines.append("|--------|-------|")
-    
+
     def fmt_lat(val):
         return f"{val} ms" if val is not None else "N/A"
 
@@ -292,12 +289,12 @@ def main() -> None:
         run_meta = load_run_metadata(base_dir)
         loadgen_results = load_loadgen_results(raw_dir)
         failures = load_validation_failures(raw_dir)
-        
+
         # We no longer load all requests into memory
         requests_path = raw_dir / "requests.jsonl"
 
         summary = build_summary(run_meta, loadgen_results, failures)
-        
+
         # Write Summary
         summary_json_path = summary_dir / "summary.json"
         summary_json_path.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
@@ -305,17 +302,21 @@ def main() -> None:
 
         # Triage Primitives
         top_failures = get_top_failing_anchors(failures)
-        
+
         # Pass 1: Find worst latency anchors by streaming
         worst_latency = find_worst_latency_anchors(requests_path)
-        
+
         anchors_to_debug = {a[0] for a in top_failures} | {a[0] for a in worst_latency}
-        
+
         # Pass 2: Extract debug bundles with limit
-        debug_files = extract_debug_bundles(requests_path, base_dir, anchors_to_debug, limit_per_anchor=10)
-        
+        debug_files = extract_debug_bundles(
+            requests_path, base_dir, anchors_to_debug, limit_per_anchor=10
+        )
+
         # Generate Report
-        report_content = generate_report(run_meta, summary, top_failures, worst_latency, debug_files)
+        report_content = generate_report(
+            run_meta, summary, top_failures, worst_latency, debug_files
+        )
         report_path = report_dir / "report.md"
         report_path.write_text(report_content, encoding="utf-8")
         logger.info("Wrote report.md to %s", report_path)

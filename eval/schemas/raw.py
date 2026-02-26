@@ -54,7 +54,9 @@ class RequestRecord(BaseModel):
         if "passed" not in payload:
             failure_type = payload.get("failure_type")
             status_code = payload.get("status_code")
-            payload["passed"] = failure_type is None and isinstance(status_code, int) and 200 <= status_code < 300
+            payload["passed"] = (
+                failure_type is None and isinstance(status_code, int) and 200 <= status_code < 300
+            )
 
         return payload
 

@@ -132,3 +132,16 @@ migrate: db ## Run database migrations
 .PHONY: check-users
 check-users: ## Check the users table in the database
 	$(COMPOSE) exec db psql -U myuser -d books_rec -c "\d users" -c "SELECT * FROM users;"
+
+# ==============================================================================
+# Evaluation
+# ==============================================================================
+
+.PHONY: ci-eval
+ci-eval: ## Run CI evaluation for a scenario (e.g., make ci-eval SCENARIO=similar_books_smoke)
+	uv run python scripts/ci_eval.py --scenario $(SCENARIO)
+
+.PHONY: promote-baseline
+promote-baseline: ## Promote a run to baseline (e.g., make promote-baseline SCENARIO=similar_books_smoke RUN_ID=run_123)
+	uv run python -c "from eval.baseline import promote_baseline; promote_baseline('$(SCENARIO)', '$(RUN_ID)')"
+	@echo "Promoted run $(RUN_ID) to baseline for scenario $(SCENARIO)"

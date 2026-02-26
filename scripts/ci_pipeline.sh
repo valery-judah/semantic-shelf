@@ -42,6 +42,12 @@ echo "🐳 6. Building Docker Image..."
 make build
 
 echo ""
+echo "📊 7. Running Evaluation Smoke Test..."
+# Run the smoke scenario and gate on correctness/performance
+# We skip the build here since we just built it in step 6
+uv run python scripts/ci_eval.py --scenario similar_books_smoke --no-build
+
+echo ""
 echo "========================================"
 echo "🎉 CI Pipeline completed successfully!"
 echo "========================================"

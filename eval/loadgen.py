@@ -180,7 +180,7 @@ async def run_load(
     # Shared state for workers
     next_anchor_idx = 0
     stop_event = asyncio.Event()
-    
+
     # We use a shared iterator for request_count to ensure exactly that many requests
     # are generated across all workers.
     request_iterator = None
@@ -197,7 +197,7 @@ async def run_load(
                         next(request_iterator)
                     except StopIteration:
                         break
-                
+
                 # Round-robin anchor selection
                 # We use a simple atomic-like operation (single threaded event loop)
                 current_idx = next_anchor_idx
@@ -207,17 +207,17 @@ async def run_load(
                 res, fail = await execute_request(
                     client, api_url, anchor_id, run_id, scenario_config
                 )
-                
+
                 # Append results
                 record = res if isinstance(res, RequestRecord) else RequestRecord(**res)
                 results.append(record)
-                
+
                 if fail:
-                    failure = fail if isinstance(fail, ValidationFailure) else ValidationFailure(**fail)
+                    failure = (
+                        fail if isinstance(fail, ValidationFailure) else ValidationFailure(**fail)
+                    )
                     failures.append(failure)
 
-    start_time = time.time()
-    
     # Start workers
     workers = []
     for _ in range(concurrency):
@@ -226,7 +226,7 @@ async def run_load(
     if duration_seconds is not None:
         await asyncio.sleep(duration_seconds)
         stop_event.set()
-    
+
     await asyncio.gather(*workers)
 
     # Calculate percentiles
@@ -333,7 +333,9 @@ def main():
     requests_path = os.path.join(base_dir, "raw", "requests.jsonl")
 
     asyncio.run(
-        run_load(run_id, api_url, scenario_config, anchors, results_path, failures_path, requests_path)
+        run_load(
+            run_id, api_url, scenario_config, anchors, results_path, failures_path, requests_path
+        )
     )
 
 
