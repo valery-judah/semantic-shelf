@@ -92,7 +92,8 @@ def generate_report(
             status = "✅" if s.counts.failed_requests == 0 else f"❌ ({s.counts.failed_requests})"
             lines.append(
                 f"| `{s.slice_id}` | {s.sample_size} | {status} | "
-                f"{fmt_lat(s.latency.p50_ms)} | {fmt_lat(s.latency.p95_ms)} | {fmt_lat(s.latency.p99_ms)} |"
+                f"{fmt_lat(s.latency.p50_ms)} | {fmt_lat(s.latency.p95_ms)} | "
+                f"{fmt_lat(s.latency.p99_ms)} |"
             )
 
     if deltas:
@@ -101,23 +102,30 @@ def generate_report(
         stats = deltas.get("stats", {})
         lines.append(f"- **Paired Count:** {stats.get('count', 0)}")
         lines.append(f"- **Avg Latency Delta:** {stats.get('avg_latency_delta_ms', 0.0):.2f} ms")
-        
+
         # Simple distribution of deltas
         pd_list = deltas.get("paired_deltas", [])
         if pd_list:
             lat_deltas = [d["latency_delta_ms"] for d in pd_list]
             lines.append(f"- **Min Delta:** {min(lat_deltas):.2f} ms")
             lines.append(f"- **Max Delta:** {max(lat_deltas):.2f} ms")
-            
+
             # Top regressions
-            regressions = sorted([d for d in pd_list if d["latency_delta_ms"] > 0], key=lambda x: x["latency_delta_ms"], reverse=True)[:5]
+            regressions = sorted(
+                [d for d in pd_list if d["latency_delta_ms"] > 0],
+                key=lambda x: x["latency_delta_ms"],
+                reverse=True,
+            )[:5]
             if regressions:
                 lines.append("")
                 lines.append("### Top Latency Regressions (Candidate - Baseline)")
                 lines.append("| Anchor ID | Delta (ms) | Baseline | Candidate |")
                 lines.append("|-----------|------------|----------|-----------|")
                 for r in regressions:
-                    lines.append(f"| `{r['anchor_id']}` | +{r['latency_delta_ms']:.1f} | {r['baseline_latency']:.1f} | {r['candidate_latency']:.1f} |")
+                    lines.append(
+                        f"| `{r['anchor_id']}` | +{r['latency_delta_ms']:.1f} | "
+                        f"{r['baseline_latency']:.1f} | {r['candidate_latency']:.1f} |"
+                    )
 
     lines.append("")
     lines.append("## 7. Artifacts")

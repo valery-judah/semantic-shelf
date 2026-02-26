@@ -1,89 +1,78 @@
-import json
-import os
 import random
-from dataclasses import dataclass
 from typing import Any
 
-from eval.schemas.golden import GoldenSet
+from pydantic import BaseModel, ConfigDict, Field
+
+from eval.domain import AnchorId, DatasetId, GoldenId, ScenarioId
+from eval.errors import AnchorNotFoundError, ScenarioMismatchError
+from eval.repositories import default_golden_repo
 
 
-@dataclass(frozen=True)
-class AnchorSelectionInputs:
-    dataset_id: str
-    scenario_id: str
+class AnchorSelectionInputs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: DatasetId
+    scenario_id: ScenarioId
     seed: int
-    count: int
+    count: int = Field(ge=0)
 
 
-_ANCHOR_CATALOG: dict[str, dict[str, list[str]]] = {
-    "local_dev": {
-        "similar_books_smoke": [
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            "10",
-            "11",
-            "12",
-        ]
+class Anchor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: AnchorId
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+_ANCHOR_CATALOG: dict[DatasetId, dict[ScenarioId, list[AnchorId]]] = {
+    DatasetId("local_dev"): {
+        ScenarioId("similar_books_smoke"): [AnchorId(str(i)) for i in range(1, 13)]
     }
 }
 
 
-def load_golden_set(golden_id: str) -> GoldenSet:
-    # Try with .json extension if not present
-    if not golden_id.endswith(".json"):
-        filename = f"{golden_id}.json"
-    else:
-        filename = golden_id
-        
-    path = os.path.join("scenarios", "goldens", filename)
-    if not os.path.exists(path):
-        raise ValueError(f"Golden set not found at {path}")
-    with open(path) as f:
-        return GoldenSet(**json.load(f))
-
-
-def available_anchors(dataset_id: str, scenario_id: str) -> tuple[list[str], dict[str, dict[str, Any]]]:
-    # Check if dataset_id corresponds to a golden set file
-    golden_path = os.path.join("scenarios", "goldens", f"{dataset_id}.json")
-    if os.path.exists(golden_path):
-        golden = load_golden_set(dataset_id)
+def _available_anchors(dataset_id: DatasetId, scenario_id: ScenarioId) -> list[Anchor]:
+    golden_id = GoldenId(dataset_id)
+    if default_golden_repo.exists(golden_id):
+        golden = default_golden_repo.load_golden_set(golden_id)
         if golden.scenario_id != scenario_id:
-            raise ValueError(
+            raise ScenarioMismatchError(
                 "Golden set scenario mismatch: "
                 f"golden.scenario_id={golden.scenario_id} requested_scenario_id={scenario_id}"
             )
-        anchors = [a.anchor_id for a in golden.anchors]
-        metadata = {a.anchor_id: a.metadata for a in golden.anchors}
-        return anchors, metadata
+        return [Anchor(id=AnchorId(a.anchor_id), metadata=a.metadata) for a in golden.anchors]
 
     dataset_anchors = _ANCHOR_CATALOG.get(dataset_id, {})
     anchors = dataset_anchors.get(scenario_id)
     if anchors is None:
-        raise ValueError(f"No anchor catalog for dataset_id={dataset_id} scenario_id={scenario_id}")
-    return anchors.copy(), {}
+        raise AnchorNotFoundError(
+            f"No anchor catalog for dataset_id={dataset_id} scenario_id={scenario_id}"
+        )
+    return [Anchor(id=aid) for aid in anchors]
 
 
 def select_anchors(inputs: AnchorSelectionInputs) -> tuple[list[str], dict[str, dict[str, Any]]]:
-    anchors, metadata = available_anchors(inputs.dataset_id, inputs.scenario_id)
-    if inputs.count <= 0:
+    """
+    Selects anchors based on deterministic shuffling.
+    Returns:
+        A tuple of (anchors_list, metadata_dict) to remain compatible with existing
+        callers in Phase A.
+    """
+    if inputs.count == 0:
         return [], {}
 
+    available = _available_anchors(inputs.dataset_id, inputs.scenario_id)
+
     rng = random.Random(f"{inputs.dataset_id}:{inputs.scenario_id}:{inputs.seed}")
-    
-    # Use indices to shuffle so we can pick metadata later
-    indices = list(range(len(anchors)))
+
+    # Shuffle internal Anchor entities
+    indices = list(range(len(available)))
     rng.shuffle(indices)
-    
+
     selected_indices = indices[: min(inputs.count, len(indices))]
-    selected_anchors = [anchors[i] for i in selected_indices]
-    
-    selected_metadata = {aid: metadata.get(aid, {}) for aid in selected_anchors}
-    
-    return selected_anchors, selected_metadata
+    selected_anchors = [available[i] for i in selected_indices]
+
+    # Extract to legacy tuple shape for boundary compatibility
+    anchor_ids = [a.id for a in selected_anchors]
+    metadata = {a.id: a.metadata for a in selected_anchors}
+
+    return anchor_ids, metadata

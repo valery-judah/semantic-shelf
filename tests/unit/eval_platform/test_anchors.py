@@ -1,8 +1,11 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from eval.anchors import AnchorSelectionInputs, select_anchors
+from eval.errors import ScenarioMismatchError
+from eval.repositories import default_golden_repo
 
 
 def test_select_anchors_is_deterministic_for_same_inputs() -> None:
@@ -28,6 +31,24 @@ def test_select_anchors_changes_with_seed() -> None:
     assert first != second
 
 
+def test_select_anchors_negative_count_fails_validation() -> None:
+    with pytest.raises(
+        ValidationError, match="count\n  Input should be greater than or equal to 0"
+    ):
+        AnchorSelectionInputs(
+            dataset_id="local_dev", scenario_id="similar_books_smoke", seed=42, count=-1
+        )
+
+
+def test_select_anchors_zero_count_returns_empty() -> None:
+    inputs = AnchorSelectionInputs(
+        dataset_id="local_dev", scenario_id="similar_books_smoke", seed=42, count=0
+    )
+    anchors, metadata = select_anchors(inputs)
+    assert anchors == []
+    assert metadata == {}
+
+
 def test_available_anchors_rejects_golden_scenario_mismatch(monkeypatch, tmp_path) -> None:
     goldens_dir = tmp_path / "scenarios" / "goldens"
     goldens_dir.mkdir(parents=True, exist_ok=True)
@@ -47,8 +68,9 @@ def test_available_anchors_rejects_golden_scenario_mismatch(monkeypatch, tmp_pat
     )
 
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(default_golden_repo, "base_dir", str(goldens_dir))
 
-    with pytest.raises(ValueError, match="Golden set scenario mismatch"):
+    with pytest.raises(ScenarioMismatchError, match="Golden set scenario mismatch"):
         select_anchors(
             AnchorSelectionInputs(
                 dataset_id="local_dev",

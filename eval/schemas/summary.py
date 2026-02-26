@@ -36,7 +36,7 @@ class LatencyMetrics(BaseModel):
 
 class SliceMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    
+
     slice_id: str
     sample_size: int
     counts: EvaluationCounts

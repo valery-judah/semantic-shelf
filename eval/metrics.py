@@ -118,15 +118,17 @@ def compute_paired_deltas(requests: list[RequestRecord]) -> list[dict[str, Any]]
             pairs[r.paired_key][r.arm] = r
 
     paired_deltas = []
-    for key, pair in pairs.items():
+    for _key, pair in pairs.items():
         if "baseline" in pair and "candidate" in pair:
             base = pair["baseline"]
             cand = pair["candidate"]
-            paired_deltas.append({
-                "anchor_id": base.anchor_id,
-                "latency_delta_ms": cand.latency_ms - base.latency_ms,
-                "passed_delta": int(cand.passed) - int(base.passed),
-                "baseline_latency": base.latency_ms,
-                "candidate_latency": cand.latency_ms
-            })
+            paired_deltas.append(
+                {
+                    "anchor_id": base.anchor_id,
+                    "latency_delta_ms": cand.latency_ms - base.latency_ms,
+                    "passed_delta": int(cand.passed) - int(base.passed),
+                    "baseline_latency": base.latency_ms,
+                    "candidate_latency": cand.latency_ms,
+                }
+            )
     return paired_deltas

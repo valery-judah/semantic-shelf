@@ -7,8 +7,8 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from eval.metrics import build_summary as _build_summary, compute_paired_deltas
-from eval.metrics import compute_metrics_from_records
+from eval.metrics import build_summary as _build_summary
+from eval.metrics import compute_metrics_from_records, compute_paired_deltas
 from eval.metrics import find_worst_latency_anchors as _find_worst_latency_anchors
 from eval.metrics import get_top_failing_anchors as _get_top_failing_anchors
 from eval.parsers import (
@@ -226,7 +226,7 @@ def main() -> None:
                 s_reqs = slice_requests.get(s_def.slice_id, [])
                 if not s_reqs:
                     continue
-                
+
                 counts, latency = compute_metrics_from_records(s_reqs)
                 slice_metrics_list.append(
                     SliceMetrics(
@@ -236,7 +236,7 @@ def main() -> None:
                         latency=latency,
                     )
                 )
-            
+
             summary.slices = slice_metrics_list
 
         # Paired deltas computation
@@ -244,17 +244,17 @@ def main() -> None:
         deltas_content = None
         if requests:
             paired_deltas = compute_paired_deltas(requests)
-        
+
         if paired_deltas:
             import json
+
             deltas_path = summary_dir / "deltas.json"
-            avg_latency_delta = sum(d["latency_delta_ms"] for d in paired_deltas) / len(paired_deltas)
+            avg_latency_delta = sum(d["latency_delta_ms"] for d in paired_deltas) / len(
+                paired_deltas
+            )
             deltas_content = {
                 "paired_deltas": paired_deltas,
-                "stats": {
-                    "count": len(paired_deltas),
-                    "avg_latency_delta_ms": avg_latency_delta
-                }
+                "stats": {"count": len(paired_deltas), "avg_latency_delta_ms": avg_latency_delta},
             }
             deltas_path.write_text(json.dumps(deltas_content, indent=2), encoding="utf-8")
             logger.info("Wrote paired deltas to %s", deltas_path)
@@ -291,7 +291,8 @@ def main() -> None:
             total_failed = paired_regressions
             if total_failed > 0:
                 logger.error(
-                    "Gate Failed: Found %s paired correctness regressions (candidate worse than baseline).",
+                    "Gate Failed: Found %s paired correctness regressions "
+                    "(candidate worse than baseline).",
                     total_failed,
                 )
                 sys.exit(1)

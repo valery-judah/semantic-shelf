@@ -20,7 +20,7 @@ def parse_args():
         "--stage4-mode",
         choices=["golden-only", "slice-observe", "paired-enforced", "confidence-aware"],
         default="golden-only",
-        help="Stage 4 rollout mode"
+        help="Stage 4 rollout mode",
     )
     return parser.parse_args()
 
@@ -53,17 +53,21 @@ def main():
 
         # 3. Check for internal Stage 4 paired deltas first
         from pathlib import Path
+
         deltas_path = Path(f"artifacts/eval/{candidate_run_id}/summary/deltas.json")
         is_paired_run = deltas_path.exists()
 
         if args.stage4_mode == "paired-enforced" and is_paired_run:
-            print("[CI] 🏎️ Stage 4 paired-enforced mode active. Skipping cross-run baseline comparison.")
+            print(
+                "[CI] 🏎️ Stage 4 paired-enforced mode active. "
+                "Skipping cross-run baseline comparison."
+            )
             print("[CI] ✅ Gating PASSED internally via paired arms.")
             print("[CI] Artifacts:")
             print(f"[CI] - Report: artifacts/eval/{candidate_run_id}/report/report.md")
             print(f"[CI] - Summary: artifacts/eval/{candidate_run_id}/summary/summary.json")
             print(f"[CI] - Deltas: artifacts/eval/{candidate_run_id}/summary/deltas.json")
-            
+
             # Print promotion note just for historical record
             print(
                 f"[CI] To promote this run as baseline (for historical record), run: "
@@ -72,28 +76,30 @@ def main():
         else:
             # 4. Resolve Baseline
             baseline_run_id = resolve_baseline_run_id(args.scenario)
-    
+
             if baseline_run_id:
                 print(f"[CI] Found baseline: {baseline_run_id}")
                 print("[CI] Running comparison...")
-    
+
                 # 5. Compare and Gate
                 # compare_runs returns 1 on failure, 0 on success
                 cmp_exit_code = compare_runs(candidate_run_id, baseline_run_id)
-    
+
                 if cmp_exit_code != 0:
                     print("[CI] ❌ Gating FAILED. Regressions detected.")
                     exit_code = 1
                 else:
                     print("[CI] ✅ Gating PASSED. No regressions detected.")
-    
+
                 print("[CI] Artifacts:")
                 print(f"[CI] - Report: artifacts/eval/{candidate_run_id}/report/report.md")
                 print(f"[CI] - Summary: artifacts/eval/{candidate_run_id}/summary/summary.json")
                 print(f"[CI] - Deltas: artifacts/eval/{candidate_run_id}/summary/deltas.json")
-    
+
             else:
-                print(f"[CI] ⚠️ No baseline found for scenario '{args.scenario}'. Skipping comparison.")
+                print(
+                    f"[CI] ⚠️ No baseline found for scenario '{args.scenario}'. Skipping comparison."
+                )
                 print(
                     f"[CI] To promote this run as baseline, run: "
                     f"make promote-baseline SCENARIO={args.scenario} RUN_ID={candidate_run_id}"

@@ -228,9 +228,7 @@ async def run_load(
                         paired_key=paired_key,
                     )
                     results.append(
-                        res_b
-                        if isinstance(res_b, RequestRecord)
-                        else RequestRecord(**res_b)
+                        res_b if isinstance(res_b, RequestRecord) else RequestRecord(**res_b)
                     )
                     if fail_b:
                         failures.append(
@@ -250,9 +248,7 @@ async def run_load(
                         paired_key=paired_key,
                     )
                     results.append(
-                        res_c
-                        if isinstance(res_c, RequestRecord)
-                        else RequestRecord(**res_c)
+                        res_c if isinstance(res_c, RequestRecord) else RequestRecord(**res_c)
                     )
                     if fail_c:
                         failures.append(
@@ -271,7 +267,9 @@ async def run_load(
 
                     if fail:
                         failure = (
-                            fail if isinstance(fail, ValidationFailure) else ValidationFailure(**fail)
+                            fail
+                            if isinstance(fail, ValidationFailure)
+                            else ValidationFailure(**fail)
                         )
                         failures.append(failure)
 

@@ -1,7 +1,7 @@
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
 import yaml
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SliceMembershipRule(BaseModel):
@@ -34,7 +34,7 @@ class ExplicitAnchorIdsRule(SliceMembershipRule):
 
 
 RuleType = Annotated[
-    Union[FieldEqualsRule, FieldInRule, NumericRangeRule, ExplicitAnchorIdsRule],
+    FieldEqualsRule | FieldInRule | NumericRangeRule | ExplicitAnchorIdsRule,
     Field(discriminator="type"),
 ]
 

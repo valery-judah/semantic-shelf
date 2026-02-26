@@ -5,7 +5,6 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-
 from typing import Any
 
 from pydantic import ValidationError
@@ -86,7 +85,9 @@ def write_run_metadata(ctx: RunContext) -> None:
     run_json_path.write_text(run_meta.model_dump_json(indent=2), encoding="utf-8")
 
 
-def write_anchor_selection(ctx: RunContext, anchors: list[str], metadata: dict[str, dict[str, Any]]) -> None:
+def write_anchor_selection(
+    ctx: RunContext, anchors: list[str], metadata: dict[str, dict[str, Any]]
+) -> None:
     selection = AnchorSelection(
         run_id=ctx.run_id,
         scenario_id=ctx.scenario_id,
