@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
 
+from books_rec_api.repositories.telemetry_repository import TelemetryInsertResult
 from books_rec_api.schemas.telemetry import (
     EventBatchRequest,
     SimilarClickEvent,
@@ -171,7 +173,11 @@ def test_event_batch_request_discriminator():
 
 
 def test_telemetry_service_process_events(caplog):
-    service = TelemetryService()
+    repo = MagicMock()
+    repo.bulk_insert_events.return_value = TelemetryInsertResult(
+        inserted_count=1, duplicate_count=0
+    )
+    service = TelemetryService(repo=repo)
     event = SimilarClickEvent(
         event_name="similar_click",
         ts=datetime(2026, 2, 25, 19, 0, 0, tzinfo=UTC),
@@ -187,7 +193,11 @@ def test_telemetry_service_process_events(caplog):
         clicked_book_id="B",
         position=0,
     )
-    service.process_events([event])
+    result = service.process_events([event])
+
+    assert result.inserted_count == 1
+    assert result.duplicate_count == 0
+    repo.bulk_insert_events.assert_called_once_with([event])
 
     assert "TELEMETRY: {" in caplog.text
     assert '"event_name": "similar_click"' in caplog.text
@@ -215,7 +225,11 @@ def test_telemetry_service_eval_run_id_deprecation_warning(caplog):
     assert event.run_id == "run-compat"
     assert event.eval_run_id == "run-compat"
 
-    service = TelemetryService()
+    repo = MagicMock()
+    repo.bulk_insert_events.return_value = TelemetryInsertResult(
+        inserted_count=1, duplicate_count=0
+    )
+    service = TelemetryService(repo=repo)
     service.process_events([event])
 
     assert "Deprecated field 'eval_run_id' used in telemetry event similar_click" in caplog.text

@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -149,3 +150,39 @@ class BookPopularity(Base):
     )
 
     __table_args__ = (CheckConstraint("scope IN ('global')", name="ck_book_popularity_scope"),)
+
+
+class TelemetryEvent(Base):
+    __tablename__ = "telemetry_events"
+
+    # identity
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telemetry_schema_version: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # attribution
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    request_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    surface: Mapped[str] = mapped_column(Text, nullable=False)
+    arm: Mapped[str] = mapped_column(Text, nullable=False)
+    event_name: Mapped[str] = mapped_column(Text, nullable=False)
+    is_synthetic: Mapped[bool] = mapped_column(nullable=False)
+
+    # event time
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # content
+    anchor_book_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shown_book_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    positions: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    clicked_book_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # dedupe
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+
+    # ingest metadata
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (Index("idx_telemetry_events_run_event", "run_id", "event_name"),)

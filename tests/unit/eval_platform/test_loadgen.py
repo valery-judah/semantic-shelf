@@ -151,7 +151,9 @@ async def test_run_load(tmp_path, mock_scenario_config):
     failures_path = tmp_path / "validation_failures.jsonl"
     requests_path = tmp_path / "requests.jsonl"
 
-    async def mock_execute_request(client, api_url, anchor_id, run_id, scenario_config, phase="steady_state", **kwargs):
+    async def mock_execute_request(
+        client, api_url, anchor_id, run_id, scenario_config, phase="steady_state", **kwargs
+    ):
         res = {
             "requests_schema_version": "1.0",
             "run_id": run_id,

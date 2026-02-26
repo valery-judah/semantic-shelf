@@ -6,10 +6,12 @@ class TrafficConfig(BaseModel):
     concurrency: int = Field(..., gt=0, description="Number of concurrent requests")
     duration_seconds: int | None = Field(None, gt=0, description="Duration in seconds")
     request_count: int | None = Field(None, gt=0, description="Total number of requests")
-    
+
     ramp_up_seconds: int = Field(0, ge=0, description="Ramp-up duration before target concurrency")
     warmup_seconds: int | None = Field(None, ge=0, description="Warm-up duration in seconds")
-    warmup_request_count: int | None = Field(None, ge=0, description="Warm-up total number of requests")
+    warmup_request_count: int | None = Field(
+        None, ge=0, description="Warm-up total number of requests"
+    )
 
     @model_validator(mode="after")
     def check_stop_condition(self) -> "TrafficConfig":
@@ -17,12 +19,12 @@ class TrafficConfig(BaseModel):
         has_count = self.request_count is not None
         if has_duration == has_count:
             raise ValueError("Exactly one of duration_seconds or request_count must be set")
-            
+
         has_warmup_duration = self.warmup_seconds is not None
         has_warmup_count = self.warmup_request_count is not None
         if has_warmup_duration and has_warmup_count:
             raise ValueError("At most one of warmup_seconds or warmup_request_count may be set")
-            
+
         return self
 
 

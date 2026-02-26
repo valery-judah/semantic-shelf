@@ -16,15 +16,21 @@ Stage 6 is constrained by these principles from `docs/eval-platform.md`:
 4. Debuggability is part of the contract: every metric must have a triage path.
 5. Incremental complexity: Stage 6 enables quality metrics plumbing; hard quality gating remains Stage 7+
 
-## Current-State Gaps
+## Current Status and Remaining Gaps
 
-Current repo behavior (as of this plan):
+Current repo behavior (implemented in this step):
 
-- `/telemetry/events` validates event payloads, then writes JSON to logs only.
-- Telemetry schema lacks required Stage 6 fields such as `telemetry_schema_version`, `run_id`, `arm`, `is_synthetic`, and idempotency key.
-- No `telemetry_events` table exists in SQLAlchemy models or migrations.
-- Evaluator does not read telemetry or export telemetry extracts.
-- `summary/summary.json` has no quality-metrics section.
+- `/telemetry/events` validates payloads, persists rows into `telemetry_events`, and logs structured events.
+- Telemetry schema includes Stage 6 required fields (`telemetry_schema_version`, `run_id`, `arm`, `is_synthetic`, `idempotency_key`) with `eval_run_id` compatibility.
+- `telemetry_events` exists in SQLAlchemy model + Alembic migration with run/event/request indices and unique `idempotency_key`.
+- Idempotent insert uses `ON CONFLICT (idempotency_key) DO NOTHING` and returns inserted/duplicate counts.
+- Unit and integration tests cover repository insert mapping, idempotency dedupe, and API persistence response shape.
+
+Remaining Stage 6 gaps:
+
+- Evaluator does not yet read telemetry or export `raw/telemetry_extract.jsonl`.
+- `summary/summary.json` and report do not yet include quality telemetry metrics (CTR@K, position curves, synthetic/real split).
+- Loadgen synthetic telemetry emission is not yet wired.
 
 ## Target Stage 6 Capabilities
 
@@ -85,7 +91,7 @@ If any existing producers use `eval_run_id`:
 
 Add `telemetry_events` table with explicit columns (not JSON blob only):
 
-- identity: `id` (bigserial), `telemetry_schema_version`
+- identity: `id` (autoincrement integer PK), `telemetry_schema_version`
 - attribution: `run_id`, `request_id`, `surface`, `arm`, `event_name`, `is_synthetic`
 - event time: `ts`
 - content: `anchor_book_id`, `shown_book_ids` (JSON), `positions` (JSON), `clicked_book_id`, `position`
@@ -119,7 +125,7 @@ Use insert with conflict handling for idempotency:
 
 - Persist validated events in `telemetry_events`.
 - Keep structured logs for diagnostics, but DB is now source for evaluator queries.
-- Response remains `202 accepted` with optional counts.
+- Response remains `202 accepted` and returns `status`, `inserted_count`, `duplicate_count`.
 
 ### 3.2 Service and repository
 
@@ -127,7 +133,8 @@ Add repository for telemetry persistence (new module):
 
 - bulk insert accepted events
 - conflict-safe idempotency handling
-- run-scoped read API for evaluator export path
+- explicit schema-to-row mapping (no raw model dumps)
+- run-scoped read API for evaluator export path (pending)
 
 Update service (`TelemetryService`) responsibilities:
 
@@ -289,11 +296,11 @@ Primary files expected to change:
 ## 11) Done Checklist
 
 - [x] Telemetry schema v1 implemented and validated
-- [ ] `telemetry_events` table + indices + unique constraint added
-- [ ] idempotent DB writes implemented
+- [x] `telemetry_events` table + indices + unique constraint added
+- [x] idempotent DB writes implemented
 - [ ] loadgen synthetic telemetry emission implemented
 - [ ] evaluator telemetry query by `run_id` implemented
 - [ ] `raw/telemetry_extract.jsonl` generated
 - [ ] summary/report quality section added
-- [ ] tests added/updated and passing (`make test`)
-- [ ] docs updated where Stage 6 completion state is tracked
+- [x] tests added/updated and passing (`make test`)
+- [x] docs updated where Stage 6 completion state is tracked
