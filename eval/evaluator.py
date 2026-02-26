@@ -126,6 +126,14 @@ def extract_debug_bundles(
     return sorted(written_files)
 
 
+def _scenario_mode(config: ScenarioConfig | None) -> str:
+    if config is None:
+        return "N/A"
+    if config.traffic.request_count is not None:
+        return f"request_count={config.traffic.request_count}"
+    return f"duration_seconds={config.traffic.duration_seconds}"
+
+
 def generate_report(
     run_meta: RunMetadata,
     scenario_config: ScenarioConfig | None,

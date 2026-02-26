@@ -79,7 +79,7 @@ Per run directory `artifacts/eval/<run_id>/`:
 
 ## 4) Implementation checklist status
 
-- [ ] Parser modules per raw artifact type  
+- [x] Parser modules per raw artifact type  
   Current parsing exists in evaluator functions (`load_run_metadata`, `load_loadgen_results`, `load_validation_failures`) but not as dedicated parser modules per artifact type.
 
 - [x] Metric computation layer with unit tests  
