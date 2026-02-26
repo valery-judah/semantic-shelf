@@ -89,6 +89,7 @@ def extract_debug_bundles(
     written_files: list[str] = []
     target_anchor_ids = set(target_anchors)
     anchor_counts: dict[str, int] = defaultdict(int)
+    anchor_request_occurrences: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     for line_no, request in iter_request_records(requests_path):
         if not target_anchor_ids:
@@ -98,6 +99,12 @@ def extract_debug_bundles(
         if anchor_id in target_anchor_ids and anchor_counts[anchor_id] < limit_per_anchor:
             anchor_dir = sample_dir / anchor_id
             anchor_dir.mkdir(parents=True, exist_ok=True)
+
+            anchor_request_occurrences[anchor_id][request.request_id] += 1
+            request_occurrence = anchor_request_occurrences[anchor_id][request.request_id]
+            file_name = f"{request.request_id}.json"
+            if request_occurrence > 1:
+                file_name = f"{request.request_id}__{request_occurrence}.json"
 
             debug_sample = DebugRequestSample(
                 debug_schema_version=DEBUG_SCHEMA_VERSION,
@@ -115,7 +122,7 @@ def extract_debug_bundles(
                 timestamp=request.timestamp,
             )
 
-            file_path = anchor_dir / f"{request.request_id}.json"
+            file_path = anchor_dir / file_name
             file_path.write_text(debug_sample.model_dump_json(indent=2), encoding="utf-8")
             written_files.append(str(file_path.relative_to(base_dir)))
 
