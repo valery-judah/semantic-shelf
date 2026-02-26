@@ -33,7 +33,7 @@ def run_command(cmd: list[str], env: dict[str, str] | None = None) -> None:
 
 def wait_for_api() -> None:
     print("[INFO] Waiting for API to become healthy...")
-    max_retries = 30
+    max_retries = 300  # 10 minutes (300 * 2s)
     for _ in range(max_retries):
         try:
             req = urllib.request.Request("http://localhost:8000/docs", method="HEAD")

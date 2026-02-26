@@ -15,6 +15,9 @@ class EvaluationCounts(BaseModel):
     failures_by_type: dict[str, int] = Field(
         default_factory=dict, description="Breakdown of failures by type."
     )
+    status_code_distribution: dict[str, int] = Field(
+        default_factory=dict, description="Breakdown of responses by status code."
+    )
 
 
 class LatencyMetrics(BaseModel):

@@ -3,7 +3,12 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from eval.schemas.raw import AnchorSelection, RequestRecord
+from eval.schemas.raw import (
+    AnchorSelection,
+    LoadgenResults,
+    RequestRecord,
+    ValidationFailure,
+)
 from eval.schemas.run import RunMetadata
 from eval.schemas.summary import RunSummary
 
@@ -80,3 +85,44 @@ def test_raw_schemas_valid() -> None:
         timestamp=datetime.now(),
     )
     assert record.status_code == 200
+    assert record.passed is True
+
+
+def test_request_record_legacy_payload_compatibility() -> None:
+    record = RequestRecord(
+        run_id="run_123",
+        request_id="req_legacy",
+        scenario_id="similar_books_smoke",
+        anchor_id="1",
+        method="GET",
+        path="/books/1/similar?limit=5",
+        status_code=500,
+        latency_ms=45.0,
+        timestamp=datetime.now(),
+    )
+    assert record.requests_schema_version == "0.9"
+    assert record.method == "GET"
+    assert record.path == "/books/1/similar?limit=5"
+    assert record.passed is False
+
+
+def test_stage2_raw_models_valid() -> None:
+    failure = ValidationFailure(
+        request_id="req_1",
+        anchor_id="1",
+        failure_type="timeout",
+        status_code=None,
+        error_detail="Request timed out",
+        latency_ms=101.0,
+        timestamp=datetime.now(),
+    )
+    assert failure.failure_type == "timeout"
+
+    results = LoadgenResults(
+        total_requests=3,
+        passed_requests=2,
+        failed_requests=1,
+        status_code_distribution={"200": 2},
+        latency_ms={"p50": 10.0, "p95": 20.0, "p99": 30.0},
+    )
+    assert results.schema_version == "1.0.0"

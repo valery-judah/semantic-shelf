@@ -6,12 +6,11 @@ import sys
 import time
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
 import httpx
 from pydantic import ValidationError
 
-from eval.schemas.raw import AnchorSelection
+from eval.schemas.raw import AnchorSelection, LoadgenResults, RequestRecord, ValidationFailure
 from eval.schemas.run import RunMetadata
 from eval.schemas.scenario import ScenarioConfig
 
@@ -25,7 +24,7 @@ async def execute_request(
     anchor_id: str,
     run_id: str,
     scenario_config: ScenarioConfig,
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
+) -> tuple[RequestRecord, ValidationFailure | None]:
     request_id = f"req-{uuid.uuid4().hex[:8]}"
     url = f"{api_url}/books/{anchor_id}/similar"
     headers = {
@@ -71,67 +70,94 @@ async def execute_request(
                 failure_type = "invalid_json"
                 error_detail = "Response body is not valid JSON"
 
-        result = {
-            "request_id": request_id,
-            "anchor_id": anchor_id,
-            "status_code": response.status_code,
-            "latency_ms": latency_ms,
-            "passed": failure_type is None,
-        }
-
         failure = None
+        response_body = None
         if failure_type:
-            failure = {
-                "request_id": request_id,
-                "anchor_id": anchor_id,
-                "failure_type": failure_type,
-                "status_code": response.status_code,
-                "error_detail": error_detail,
-                "latency_ms": latency_ms,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            try:
+                # Capture truncated response body for debugging
+                response_body = response.text[:1000]
+            except Exception:
+                response_body = "<could not read response text>"
+
+            failure = ValidationFailure(
+                request_id=request_id,
+                anchor_id=anchor_id,
+                failure_type=failure_type,
+                status_code=response.status_code,
+                error_detail=error_detail,
+                latency_ms=latency_ms,
+                timestamp=datetime.now(UTC).isoformat(),
+            )
+
+        result = RequestRecord(
+            requests_schema_version="1.0",
+            run_id=run_id,
+            request_id=request_id,
+            scenario_id=scenario_config.scenario_id,
+            anchor_id=anchor_id,
+            status_code=response.status_code,
+            latency_ms=latency_ms,
+            passed=failure_type is None,
+            failure_type=failure_type,
+            response_body=response_body,
+            timestamp=datetime.now(UTC).isoformat(),
+        )
 
         return result, failure
 
     except httpx.TimeoutException:
         latency_ms = (time.perf_counter() - start_time) * 1000
+        timestamp = datetime.now(UTC).isoformat()
         return (
-            {
-                "request_id": request_id,
-                "anchor_id": anchor_id,
-                "status_code": None,
-                "latency_ms": latency_ms,
-                "passed": False,
-            },
-            {
-                "request_id": request_id,
-                "anchor_id": anchor_id,
-                "failure_type": "timeout",
-                "status_code": None,
-                "error_detail": "Request timed out",
-                "latency_ms": latency_ms,
-                "timestamp": datetime.now(UTC).isoformat(),
-            },
+            RequestRecord(
+                requests_schema_version="1.0",
+                run_id=run_id,
+                request_id=request_id,
+                scenario_id=scenario_config.scenario_id,
+                anchor_id=anchor_id,
+                status_code=None,
+                latency_ms=latency_ms,
+                passed=False,
+                failure_type="timeout",
+                response_body=None,
+                timestamp=timestamp,
+            ),
+            ValidationFailure(
+                request_id=request_id,
+                anchor_id=anchor_id,
+                failure_type="timeout",
+                status_code=None,
+                error_detail="Request timed out",
+                latency_ms=latency_ms,
+                timestamp=timestamp,
+            ),
         )
     except Exception as e:
         latency_ms = (time.perf_counter() - start_time) * 1000
+        timestamp = datetime.now(UTC).isoformat()
         return (
-            {
-                "request_id": request_id,
-                "anchor_id": anchor_id,
-                "status_code": None,
-                "latency_ms": latency_ms,
-                "passed": False,
-            },
-            {
-                "request_id": request_id,
-                "anchor_id": anchor_id,
-                "failure_type": "connection_error",
-                "status_code": None,
-                "error_detail": str(e),
-                "latency_ms": latency_ms,
-                "timestamp": datetime.now(UTC).isoformat(),
-            },
+            RequestRecord(
+                requests_schema_version="1.0",
+                run_id=run_id,
+                request_id=request_id,
+                scenario_id=scenario_config.scenario_id,
+                anchor_id=anchor_id,
+                status_code=None,
+                latency_ms=latency_ms,
+                passed=False,
+                failure_type="connection_error",
+                response_body=None,
+                timestamp=timestamp,
+            ),
+            ValidationFailure(
+                request_id=request_id,
+                anchor_id=anchor_id,
+                failure_type="connection_error",
+                status_code=None,
+                error_detail=str(e),
+                latency_ms=latency_ms,
+                timestamp=timestamp,
+            ),
         )
 
 
@@ -142,59 +168,73 @@ async def run_load(
     anchors: list[str],
     results_path: str,
     failures_path: str,
+    requests_path: str,
 ) -> None:
-    results = []
-    failures = []
+    results: list[RequestRecord] = []
+    failures: list[ValidationFailure] = []
 
     concurrency = scenario_config.traffic.concurrency
     request_count = scenario_config.traffic.request_count
     duration_seconds = scenario_config.traffic.duration_seconds
 
-    semaphore = asyncio.Semaphore(concurrency)
+    # Shared state for workers
+    next_anchor_idx = 0
+    stop_event = asyncio.Event()
+    
+    # We use a shared iterator for request_count to ensure exactly that many requests
+    # are generated across all workers.
+    request_iterator = None
+    if request_count is not None:
+        request_iterator = iter(range(request_count))
 
-    async def worker(anchor_id: str):
-        async with semaphore:
-            async with httpx.AsyncClient() as client:
+    async def worker():
+        nonlocal next_anchor_idx
+        async with httpx.AsyncClient() as client:
+            while not stop_event.is_set():
+                # If we have a fixed request count, grab a ticket
+                if request_iterator is not None:
+                    try:
+                        next(request_iterator)
+                    except StopIteration:
+                        break
+                
+                # Round-robin anchor selection
+                # We use a simple atomic-like operation (single threaded event loop)
+                current_idx = next_anchor_idx
+                next_anchor_idx += 1
+                anchor_id = anchors[current_idx % len(anchors)]
+
                 res, fail = await execute_request(
                     client, api_url, anchor_id, run_id, scenario_config
                 )
-                results.append(res)
+                
+                # Append results
+                record = res if isinstance(res, RequestRecord) else RequestRecord(**res)
+                results.append(record)
+                
                 if fail:
-                    failures.append(fail)
+                    failure = fail if isinstance(fail, ValidationFailure) else ValidationFailure(**fail)
+                    failures.append(failure)
 
     start_time = time.time()
-    tasks = []
+    
+    # Start workers
+    workers = []
+    for _ in range(concurrency):
+        workers.append(asyncio.create_task(worker()))
 
-    if request_count is not None:
-        # Generate exactly request_count requests, cycling through anchors if needed
-        anchor_cycle = [anchors[i % len(anchors)] for i in range(request_count)]
-        for anchor_id in anchor_cycle:
-            tasks.append(asyncio.create_task(worker(anchor_id)))
-        await asyncio.gather(*tasks)
-    elif duration_seconds is not None:
-        # Run for duration_seconds
-        anchor_idx = 0
-        while time.time() - start_time < duration_seconds:
-            # We must control concurrency ourselves in a while loop
-            if len(tasks) >= concurrency:
-                # Wait for at least one to finish
-                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                tasks = list(pending)
-
-            anchor_id = anchors[anchor_idx % len(anchors)]
-            anchor_idx += 1
-            tasks.append(asyncio.create_task(worker(anchor_id)))
-
-        # Wait for remaining tasks to complete
-        if tasks:
-            await asyncio.gather(*tasks)
+    if duration_seconds is not None:
+        await asyncio.sleep(duration_seconds)
+        stop_event.set()
+    
+    await asyncio.gather(*workers)
 
     # Calculate percentiles
-    latencies = sorted([r["latency_ms"] for r in results])
+    latencies = sorted([r.latency_ms for r in results])
 
     def calc_percentile(p):
         if not latencies:
-            return 0.0
+            return None
         idx = int((p / 100.0) * (len(latencies) - 1))
         return round(latencies[idx], 2)
 
@@ -205,30 +245,30 @@ async def run_load(
     # Calculate status code distribution
     status_codes = {}
     for r in results:
-        code = r["status_code"]
+        code = r.status_code
         if code is not None:
             code_str = str(code)
             status_codes[code_str] = status_codes.get(code_str, 0) + 1
 
-    loadgen_results = {
-        "schema_version": "1.0.0",
-        "total_requests": len(results),
-        "passed_requests": sum(1 for r in results if r["passed"]),
-        "failed_requests": sum(1 for r in results if not r["passed"]),
-        "status_code_distribution": status_codes,
-        "latency_ms": {
-            "p50": p50,
-            "p95": p95,
-            "p99": p99,
-        },
-    }
+    loadgen_results = LoadgenResults(
+        schema_version="1.0.0",
+        total_requests=len(results),
+        passed_requests=sum(1 for r in results if r.passed),
+        failed_requests=sum(1 for r in results if not r.passed),
+        status_code_distribution=status_codes,
+        latency_ms={"p50": p50, "p95": p95, "p99": p99},
+    )
 
     with open(results_path, "w") as f:
-        json.dump(loadgen_results, f, indent=2)
+        f.write(loadgen_results.model_dump_json(indent=2))
 
     with open(failures_path, "w") as f:
         for fail in failures:
-            f.write(json.dumps(fail) + "\n")
+            f.write(fail.model_dump_json() + "\n")
+
+    with open(requests_path, "w") as f:
+        for req in results:
+            f.write(req.model_dump_json() + "\n")
 
     logger.info(
         f"Load generation complete. Total requests: {len(results)}. Failures: {len(failures)}."
@@ -290,8 +330,11 @@ def main():
 
     results_path = os.path.join(base_dir, "raw", "loadgen_results.json")
     failures_path = os.path.join(base_dir, "raw", "validation_failures.jsonl")
+    requests_path = os.path.join(base_dir, "raw", "requests.jsonl")
 
-    asyncio.run(run_load(run_id, api_url, scenario_config, anchors, results_path, failures_path))
+    asyncio.run(
+        run_load(run_id, api_url, scenario_config, anchors, results_path, failures_path, requests_path)
+    )
 
 
 if __name__ == "__main__":
