@@ -123,7 +123,8 @@ def generate_report(
 
                 if bucket.impressions < 100:
                     lines.append(
-                        f"⚠️ **Data Sufficiency Warning**: Impressions ({bucket.impressions}) < 100. Metrics may be unreliable."
+                        f"⚠️ **Data Sufficiency Warning**: Impressions ({bucket.impressions}) "
+                        "< 100. Metrics may be unreliable."
                     )
 
                 lines.append(f"- **Impressions**: {bucket.impressions}")

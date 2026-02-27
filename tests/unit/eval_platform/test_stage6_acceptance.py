@@ -185,7 +185,7 @@ def test_stage6_acceptance_quality_metrics_integration(monkeypatch, tmp_path: Pa
     assert "quality_metrics" in summary
     qm = summary["quality_metrics"]
     assert "k" in qm
-    
+
     # Ensure canonical buckets are present
     buckets = qm["by_traffic_type"]
     assert "synthetic" in buckets
@@ -196,13 +196,13 @@ def test_stage6_acceptance_quality_metrics_integration(monkeypatch, tmp_path: Pa
     assert buckets["synthetic"]["impressions"] == 1
     assert buckets["synthetic"]["clicks"] == 1
     assert buckets["synthetic"]["ctr_at_k"] == 1.0
-    assert "1" in buckets["synthetic"]["ctr_by_position"] # clicked B at pos 1
+    assert "1" in buckets["synthetic"]["ctr_by_position"]  # clicked B at pos 1
 
     # Real bucket checks
     assert buckets["real"]["impressions"] == 1
     assert buckets["real"]["clicks"] == 1
     assert buckets["real"]["ctr_at_k"] == 1.0
-    assert "0" in buckets["real"]["ctr_by_position"] # clicked C at pos 0
+    assert "0" in buckets["real"]["ctr_by_position"]  # clicked C at pos 0
 
     # Combined bucket checks
     assert buckets["combined"]["impressions"] == 2
