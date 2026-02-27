@@ -12,7 +12,13 @@ import httpx
 import yaml
 from pydantic import ValidationError
 
-from eval.schemas.raw import AnchorSelection, LoadgenResults, RequestRecord, ValidationFailure
+from eval.schemas.raw import (
+    AnchorSelection,
+    LoadgenLatency,
+    LoadgenResults,
+    RequestRecord,
+    ValidationFailure,
+)
 from eval.schemas.run import RunMetadata
 from eval.schemas.scenario import ScenarioConfig
 
@@ -162,7 +168,7 @@ async def execute_request(
                 status_code=response.status_code,
                 error_detail=error_detail,
                 latency_ms=latency_ms,
-                timestamp=datetime.now(UTC).isoformat(),
+                timestamp=datetime.now(UTC),
                 phase=phase,
             )
         else:
@@ -214,7 +220,7 @@ async def execute_request(
             passed=failure_type is None,
             failure_type=failure_type,
             response_body=response_body,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(UTC),
             arm=arm,
             paired_key=paired_key,
             phase=phase,
@@ -224,7 +230,7 @@ async def execute_request(
 
     except httpx.TimeoutException:
         latency_ms = (time.perf_counter() - start_time) * 1000
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = datetime.now(UTC)
         return (
             RequestRecord(
                 requests_schema_version="1.0",
@@ -255,7 +261,7 @@ async def execute_request(
         )
     except httpx.RequestError as e:
         latency_ms = (time.perf_counter() - start_time) * 1000
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = datetime.now(UTC)
         return (
             RequestRecord(
                 requests_schema_version="1.0",
@@ -542,7 +548,7 @@ async def run_load(
         passed_requests=sum(1 for r in steady_results if r.passed),
         failed_requests=sum(1 for r in steady_results if not r.passed),
         status_code_distribution=status_codes,
-        latency_ms={"p50": p50, "p95": p95, "p99": p99},
+        latency_ms=LoadgenLatency(p50=p50, p95=p95, p99=p99),
     )
 
     with open(results_path, "w") as f:

@@ -5,7 +5,7 @@ clicks = 0
 matched_clicks = 0
 k = 10
 
-with open("artifacts/eval/run_307db40b/raw/telemetry_extract.jsonl", "r") as f:
+with open("artifacts/eval/run_307db40b/raw/telemetry_extract.jsonl") as f:
     for line in f:
         event = json.loads(line)
         if event["event_name"] == "similar_impression":
@@ -23,4 +23,3 @@ print(f"Impressions: {impressions}")
 print(f"Clicks: {clicks}")
 print(f"Matched Clicks at < K ({k}): {matched_clicks}")
 print(f"CTR@K ({k}): {ctr}")
-

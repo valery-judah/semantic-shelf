@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from eval.anchors import AnchorSelectionInputs, select_anchors
+from eval.domain import DatasetId, ScenarioId
 from eval.schemas.raw import AnchorSelection
 from eval.schemas.run import RunMetadata
 
@@ -108,8 +109,8 @@ def main() -> None:
 
         anchors, metadata = select_anchors(
             AnchorSelectionInputs(
-                dataset_id=ctx.dataset_id,
-                scenario_id=ctx.scenario_id,
+                dataset_id=DatasetId(ctx.dataset_id),
+                scenario_id=ScenarioId(ctx.scenario_id),
                 seed=ctx.seed,
                 count=ctx.anchor_count,
             )

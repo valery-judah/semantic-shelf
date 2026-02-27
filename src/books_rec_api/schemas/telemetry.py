@@ -101,7 +101,6 @@ class EventBatchResponse(BaseModel):
 class EvalTelemetryEventBase(BaseModel):
     """Base read model for evaluator quality metric events."""
 
-    event_name: str = Field(description="The name of the event")
     ts: datetime = Field(description="Timestamp of the event in UTC")
     request_id: str = Field(description="Join key, matching the trace_id from the API")
     run_id: str = Field(description="The evaluation run identifier")

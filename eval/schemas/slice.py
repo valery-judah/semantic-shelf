@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class SliceMembershipRule(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    type: str
 
 
 class FieldEqualsRule(SliceMembershipRule):
@@ -45,7 +44,7 @@ class SliceDefinition(BaseModel):
     slice_id: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
     priority: int = Field(..., ge=1)
-    min_sample_size: int = Field(1, ge=1)
+    min_sample_size: int = Field(default=1, ge=1)
     membership_rule: RuleType
 
 

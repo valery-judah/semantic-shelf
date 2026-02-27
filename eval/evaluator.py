@@ -27,6 +27,7 @@ from eval.parsers import (
 from eval.parsers import (
     load_validation_failures as _load_validation_failures,
 )
+from eval.policies import paired_mode_gate_failure_count
 from eval.rendering import generate_report as _generate_report
 from eval.schemas.raw import (
     AnchorSelection,
@@ -46,22 +47,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 DEBUG_SCHEMA_VERSION = "1.0.0"
-
-
-def _paired_mode_gate_failure_count(requests: list[RequestRecord]) -> int | None:
-    """Return correctness regressions for paired runs, or None for non-paired runs."""
-    paired_requests = [
-        r
-        for r in requests
-        if r.arm in {"baseline", "candidate"}
-        and getattr(r, "phase", "steady_state") == "steady_state"
-    ]
-    if not paired_requests:
-        return None
-
-    baseline_failures = sum(1 for r in paired_requests if r.arm == "baseline" and not r.passed)
-    candidate_failures = sum(1 for r in paired_requests if r.arm == "candidate" and not r.passed)
-    return max(candidate_failures - baseline_failures, 0)
 
 
 def load_scenario_config(repo_root: Path, scenario_id: str) -> ScenarioConfig | None:
@@ -331,7 +316,7 @@ def main() -> None:
         report_path.write_text(report_content, encoding="utf-8")
         logger.info("Wrote report.md to %s", report_path)
 
-        paired_regressions = _paired_mode_gate_failure_count(requests)
+        paired_regressions = paired_mode_gate_failure_count(requests)
         if paired_regressions is not None:
             total_failed = paired_regressions
             if total_failed > 0:

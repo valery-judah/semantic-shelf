@@ -164,11 +164,11 @@ All targets should use existing repository command policy and stay `uv`/`make` c
 
 ## Success Criteria
 
-- [ ] Acceptance tests are under `tests/integration/eval_platform/`, not unit paths.
-- [ ] Parser tests are isolated under `tests/unit/eval_platform/parsers/`.
-- [ ] `test_evaluator.py` and `test_eval_orchestrator.py` are wiring-focused only.
-- [ ] Metrics coverage is split between formula correctness and integration pipeline behavior.
-- [ ] Policy/rules behavior has a dedicated deterministic unit module.
-- [ ] Response-shaping/rendering semantics are explicitly tested with stable invariants.
-- [ ] Store interface contract tests run against filesystem backend and are backend-reusable.
-- [ ] CI/Makefile can run unit and integration scopes independently while preserving `make test`.
+- [x] Acceptance tests are under `tests/integration/eval_platform/`, not unit paths.
+- [x] Parser tests are isolated under `tests/unit/eval_platform/parsers/`.
+- [x] `test_evaluator.py` and `test_eval_orchestrator.py` are wiring-focused only.
+- [x] Metrics coverage is split between formula correctness and integration pipeline behavior.
+- [x] Policy/rules behavior has a dedicated deterministic unit module.
+- [x] Response-shaping/rendering semantics are explicitly tested with stable invariants.
+- [x] Store interface contract tests run against filesystem backend and are backend-reusable.
+- [x] CI/Makefile can run unit and integration scopes independently while preserving `make test`.

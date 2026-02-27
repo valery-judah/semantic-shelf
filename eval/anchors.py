@@ -72,7 +72,7 @@ def select_anchors(inputs: AnchorSelectionInputs) -> tuple[list[str], dict[str, 
     selected_anchors = [available[i] for i in selected_indices]
 
     # Extract to legacy tuple shape for boundary compatibility
-    anchor_ids = [a.id for a in selected_anchors]
-    metadata = {a.id: a.metadata for a in selected_anchors}
+    anchor_ids = [str(a.id) for a in selected_anchors]
+    metadata = {str(a.id): a.metadata for a in selected_anchors}
 
     return anchor_ids, metadata

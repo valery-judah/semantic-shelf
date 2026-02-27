@@ -110,6 +110,7 @@ def compare_runs(candidate_id: str, baseline_id: str) -> int:
         baseline_value=b_fail,
         candidate_value=c_fail,
         absolute_delta=c_fail - b_fail,
+        relative_delta=None,
         status=status,
         gate_type="hard",
         threshold={"max": 0},
@@ -130,6 +131,7 @@ def compare_runs(candidate_id: str, baseline_id: str) -> int:
         baseline_value=b_err,
         candidate_value=c_err,
         absolute_delta=delta_err,
+        relative_delta=None,
         status=status,
         gate_type="hard",
         threshold={"max_increase": 0.05},
@@ -167,6 +169,7 @@ def compare_runs(candidate_id: str, baseline_id: str) -> int:
 
     # Construct Report
     report = DiffReport(
+        diff_schema_version="1.0.0",
         scenario_id=candidate_meta.scenario_id,
         baseline_run_id=baseline_id,
         candidate_run_id=candidate_id,

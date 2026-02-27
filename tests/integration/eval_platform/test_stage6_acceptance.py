@@ -1,7 +1,7 @@
 import json
+import os
+import subprocess
 from pathlib import Path
-
-from eval import evaluator
 
 
 def _write_stage6_scenario_file(repo_root: Path) -> None:
@@ -93,7 +93,7 @@ def _write_run_fixture(base_dir: Path, run_id: str) -> None:
             f.write(json.dumps(req) + "\n")
 
 
-def test_stage6_acceptance_quality_metrics_integration(monkeypatch, tmp_path: Path) -> None:
+def test_stage6_acceptance_quality_metrics_integration(tmp_path: Path) -> None:
     """
     Acceptance test for Stage 6 Phase D:
     Ensures that the evaluator integrates Quality Metrics successfully,
@@ -167,15 +167,19 @@ def test_stage6_acceptance_quality_metrics_integration(monkeypatch, tmp_path: Pa
         for event in telemetry_events:
             f.write(json.dumps(event) + "\n")
 
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("sys.argv", ["evaluator.py", "--run-id", run_id])
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path.cwd())
 
     # Should exit cleanly (status code 0) despite metrics existing
     # (Checking non-gating behavior).
-    try:
-        evaluator.main()
-    except SystemExit as exc:
-        assert exc.code == 0, "Evaluator should not fail CI due to quality metrics"
+    res = subprocess.run(
+        ["uv", "run", "python", "-m", "eval.evaluator", "--run-id", run_id],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Evaluator failed: {res.stderr}"
 
     # 1. Verify summary.json schema
     summary_path = base_dir / "summary" / "summary.json"

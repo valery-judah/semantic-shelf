@@ -39,9 +39,19 @@ lint: ## Lint the code using ruff
 type: ## Run type checking using mypy
 	uv run mypy src
 
+.PHONY: test-unit
+test-unit: install ## Run the unit test suite using pytest
+	uv run pytest tests/unit/
+
+.PHONY: test-integration
+test-integration: install ## Run the integration test suite using pytest
+	uv run pytest tests/integration/
+
+.PHONY: test-acceptance
+test-acceptance: test-integration ## Run the acceptance test suite (currently aliased to integration)
+
 .PHONY: test
-test: install ## Run the test suite using pytest
-	uv run pytest
+test: test-unit test-integration ## Run all test suites using pytest
 
 .PHONY: openapi
 openapi: install ## Generate the OpenAPI schema

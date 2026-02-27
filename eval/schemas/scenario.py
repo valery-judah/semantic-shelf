@@ -6,11 +6,15 @@ from pydantic import BaseModel, Field, model_validator
 
 class TrafficConfig(BaseModel):
     concurrency: int = Field(..., gt=0, description="Number of concurrent requests")
-    duration_seconds: int | None = Field(None, gt=0, description="Duration in seconds")
-    request_count: int | None = Field(None, gt=0, description="Total number of requests")
+    duration_seconds: int | None = Field(default=None, gt=0, description="Duration in seconds")
+    request_count: int | None = Field(default=None, gt=0, description="Total number of requests")
 
-    ramp_up_seconds: int = Field(0, ge=0, description="Ramp-up duration before target concurrency")
-    warmup_seconds: int | None = Field(None, ge=0, description="Warm-up duration in seconds")
+    ramp_up_seconds: int = Field(
+        default=0, ge=0, description="Ramp-up duration before target concurrency"
+    )
+    warmup_seconds: int | None = Field(
+        default=None, ge=0, description="Warm-up duration in seconds"
+    )
     warmup_request_count: int | None = Field(
         None, ge=0, description="Warm-up total number of requests"
     )
@@ -35,13 +39,15 @@ class AnchorConfig(BaseModel):
 
 
 class ValidationConfig(BaseModel):
-    status_code: int = Field(200, description="Expected HTTP status code")
+    status_code: int = Field(default=200, description="Expected HTTP status code")
     response_has_keys: list[str] = Field(
         default_factory=lambda: ["similar_book_ids"],
         description="Keys expected in the JSON response",
     )
-    no_duplicates: bool = Field(True, description="Ensure no duplicates in lists")
-    anchor_not_in_results: bool = Field(True, description="Ensure anchor ID is not in results")
+    no_duplicates: bool = Field(default=True, description="Ensure no duplicates in lists")
+    anchor_not_in_results: bool = Field(
+        default=True, description="Ensure anchor ID is not in results"
+    )
 
 
 class TelemetryConfig(BaseModel):
@@ -67,14 +73,16 @@ class TelemetryConfig(BaseModel):
 class ScenarioConfig(BaseModel):
     scenario_id: str
     scenario_version: str
-    schema_version: str = Field("1.0.0")
+    schema_version: str = Field(default="1.0.0")
     traffic: TrafficConfig
     anchors: AnchorConfig
     validations: ValidationConfig
     telemetry: TelemetryConfig | None = Field(
         default=None, description="Optional telemetry configuration"
     )
-    paired_arms: bool = Field(False, description="Enable paired baseline/candidate execution")
+    paired_arms: bool = Field(
+        default=False, description="Enable paired baseline/candidate execution"
+    )
 
     @classmethod
     def load_from_yaml(cls, path: str) -> "ScenarioConfig":

@@ -1,9 +1,14 @@
 import json
 import os
+from typing import Protocol
 
 from eval.domain import GoldenId
 from eval.errors import GoldenSetNotFoundError
 from eval.schemas.golden import GoldenSet
+from eval.schemas.raw import RequestRecord, ValidationFailure
+from eval.schemas.run import RunMetadata
+from eval.schemas.summary import RunSummary
+from eval.telemetry import TelemetryEvent
 
 
 class GoldenRepository:
@@ -40,3 +45,64 @@ default_golden_repo = GoldenRepository()
 def load_golden_set(golden_id: GoldenId) -> GoldenSet:
     """Convenience wrapper for the default repository."""
     return default_golden_repo.load_golden_set(golden_id)
+
+
+class RunStore(Protocol):
+    """Contract for storing and retrieving run metadata and summaries."""
+
+    def save_run(self, run: RunMetadata) -> None:
+        """Saves run metadata. Should be idempotent."""
+        ...
+
+    def get_run(self, run_id: str) -> RunMetadata:
+        """Retrieves run metadata. Raises RunNotFoundError if not found."""
+        ...
+
+    def save_summary(self, run_id: str, summary: RunSummary) -> None:
+        """Saves a run summary. Should be idempotent."""
+        ...
+
+    def get_summary(self, run_id: str) -> RunSummary:
+        """Retrieves run summary. Raises RunNotFoundError if not found."""
+        ...
+
+
+class EventStore(Protocol):
+    """Contract for storing and retrieving telemetry events."""
+
+    def save_events(self, run_id: str, events: list[TelemetryEvent]) -> None:
+        """Appends telemetry events for a run. Order should be preserved."""
+        ...
+
+    def get_events(
+        self, run_id: str, limit: int = 100, cursor: str | None = None
+    ) -> tuple[list[TelemetryEvent], str | None]:
+        """
+        Retrieves telemetry events with cursor-based pagination.
+        Returns a tuple of (events, next_cursor).
+        """
+        ...
+
+
+class QueryStore(Protocol):
+    """Contract for storing and retrieving request and failure records."""
+
+    def save_requests(self, run_id: str, requests: list[RequestRecord]) -> None:
+        """Appends request records. Order should be preserved."""
+        ...
+
+    def get_requests(
+        self, run_id: str, limit: int = 100, cursor: str | None = None
+    ) -> tuple[list[RequestRecord], str | None]:
+        """Retrieves request records with cursor-based pagination."""
+        ...
+
+    def save_failures(self, run_id: str, failures: list[ValidationFailure]) -> None:
+        """Appends failure records. Order should be preserved."""
+        ...
+
+    def get_failures(
+        self, run_id: str, limit: int = 100, cursor: str | None = None
+    ) -> tuple[list[ValidationFailure], str | None]:
+        """Retrieves failure records with cursor-based pagination."""
+        ...

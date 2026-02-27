@@ -1,12 +1,12 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from books_rec_api.models import Book
+from tests.integration.conftest import DataFactory
 
 
 @pytest.fixture
-def sample_books(db_session):
-    book1 = Book(
+def sample_books(test_data: DataFactory):
+    book1 = test_data.create_book(
         id="book-1",
         title="Dune",
         authors=["Frank Herbert"],
@@ -14,15 +14,14 @@ def sample_books(db_session):
         publication_year=1965,
         description="A science fiction epic on Arrakis.",
     )
-    book2 = Book(
+    book2 = test_data.create_book(
         id="book-2",
         title="Foundation",
         authors=["Isaac Asimov"],
         genres=["sci-fi", "classic"],
         publication_year=1951,
     )
-    db_session.add_all([book1, book2])
-    db_session.commit()
+    test_data.commit()
     return [book1, book2]
 
 

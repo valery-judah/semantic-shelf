@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from eval.evaluator import _paired_mode_gate_failure_count
+from eval.policies import paired_mode_gate_failure_count
 from eval.schemas.raw import RequestRecord
 
 
@@ -44,12 +44,12 @@ def test_paired_run_artifact_shape():
     )
 
     # Candidate fails, baseline passes -> 1 failure regression
-    assert _paired_mode_gate_failure_count([baseline_req, candidate_req]) == 1
+    assert paired_mode_gate_failure_count([baseline_req, candidate_req]) == 1
 
     # Candidate passes, baseline fails -> 0 failure regressions (no regression)
     baseline_fail = baseline_req.model_copy(update={"passed": False})
     candidate_pass = candidate_req.model_copy(update={"passed": True})
-    assert _paired_mode_gate_failure_count([baseline_fail, candidate_pass]) == 0
+    assert paired_mode_gate_failure_count([baseline_fail, candidate_pass]) == 0
 
     # Serialization shape
     serialized = baseline_req.model_dump(mode="json")

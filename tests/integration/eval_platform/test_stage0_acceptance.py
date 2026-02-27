@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -6,9 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from books_rec_api.middleware import EvalContextMiddleware
-from eval import evaluator
 from eval.anchors import AnchorSelectionInputs, select_anchors
-from scripts import eval_orchestrator
 
 
 class _FakeResponse:
@@ -49,16 +49,25 @@ def test_request_logs_include_run_and_request_ids(caplog: pytest.LogCaptureFixtu
     assert record.request_id == "req-456"  # type: ignore[attr-defined]
 
 
-def test_run_directory_has_schema_valid_run_and_summary(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_run_directory_has_schema_valid_run_and_summary(tmp_path: Path) -> None:
     run_id = "run_stage0"
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("EVAL_RUN_ID", run_id)
-    monkeypatch.setenv("EVAL_DATASET_ID", "local_dev")
-    monkeypatch.setenv("EVAL_ANCHOR_COUNT", "2")
 
-    eval_orchestrator.main()
+    env = os.environ.copy()
+    env["EVAL_RUN_ID"] = run_id
+    env["EVAL_DATASET_ID"] = "local_dev"
+    env["EVAL_ANCHOR_COUNT"] = "2"
+    # Provide PYTHONPATH so the subprocess can import 'scripts' and 'eval'
+    env["PYTHONPATH"] = str(Path.cwd())
+
+    # Replace eval_orchestrator.main() with subprocess
+    orchestrator_res = subprocess.run(
+        ["uv", "run", "python", "-m", "scripts.eval_orchestrator"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert orchestrator_res.returncode == 0, f"eval_orchestrator failed: {orchestrator_res.stderr}"
 
     # Simulate loadgen output
     raw_dir = tmp_path / "artifacts" / "eval" / run_id / "raw"
@@ -74,8 +83,15 @@ def test_run_directory_has_schema_valid_run_and_summary(
     )
     (raw_dir / "validation_failures.jsonl").write_text("", encoding="utf-8")
 
-    monkeypatch.setattr("sys.argv", ["evaluator.py", "--run-id", run_id])
-    evaluator.main()
+    # Replace evaluator.main() with subprocess
+    evaluator_res = subprocess.run(
+        ["uv", "run", "python", "-m", "eval.evaluator", "--run-id", run_id],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert evaluator_res.returncode == 0, f"evaluator failed: {evaluator_res.stderr}"
 
     run_json_path = tmp_path / "artifacts" / "eval" / run_id / "run.json"
     summary_json_path = tmp_path / "artifacts" / "eval" / run_id / "summary" / "summary.json"

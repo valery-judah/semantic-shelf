@@ -9,16 +9,16 @@ class MetricDiff(BaseModel):
 
     metric_name: str = Field(..., description="Name of the metric being compared.")
     baseline_value: float | int | None = Field(
-        None, description="Value of the metric in the baseline run."
+        default=None, description="Value of the metric in the baseline run."
     )
     candidate_value: float | int | None = Field(
-        None, description="Value of the metric in the candidate run."
+        default=None, description="Value of the metric in the candidate run."
     )
     absolute_delta: float | int | None = Field(
-        None, description="Absolute difference (candidate - baseline)."
+        default=None, description="Absolute difference (candidate - baseline)."
     )
     relative_delta: float | None = Field(
-        None, description="Relative difference (candidate - baseline) / baseline."
+        default=None, description="Relative difference (candidate - baseline) / baseline."
     )
     status: Literal["PASS", "FAIL", "WARN", "INFO"] = Field(
         ..., description="Status of the comparison for this metric."
@@ -27,7 +27,7 @@ class MetricDiff(BaseModel):
         ..., description="Type of gate applied to this metric."
     )
     threshold: dict[str, Any] | None = Field(
-        None, description="Configuration of the threshold applied."
+        default=None, description="Configuration of the threshold applied."
     )
 
 
@@ -35,7 +35,7 @@ class DiffReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     diff_schema_version: str = Field(
-        "1.0", min_length=1, description="Schema version for this diff report."
+        default="1.0", min_length=1, description="Schema version for this diff report."
     )
     scenario_id: str = Field(..., min_length=1, description="Identifier of the scenario.")
     baseline_run_id: str = Field(..., min_length=1, description="Run ID of the baseline.")

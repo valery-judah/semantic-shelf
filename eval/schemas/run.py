@@ -8,7 +8,7 @@ class RunMetadata(BaseModel):
 
     run_id: str = Field(..., min_length=1, description="Unique identifier for this evaluation run.")
     run_schema_version: str = Field(
-        "1.0", min_length=1, description="Schema version for this run metadata payload."
+        default="1.0", min_length=1, description="Schema version for this run metadata payload."
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
@@ -18,7 +18,9 @@ class RunMetadata(BaseModel):
     scenario_version: str = Field(
         ..., min_length=1, description="Version of the scenario executed."
     )
-    git_sha: str | None = Field(None, description="Git commit SHA of the codebase if available.")
+    git_sha: str | None = Field(
+        default=None, description="Git commit SHA of the codebase if available."
+    )
     dataset_id: str = Field(..., min_length=1, description="Identifier of the dataset used.")
     seed: int = Field(..., ge=0, description="Random seed used for deterministic selection.")
     anchor_count: int = Field(..., ge=0, description="Configured number of anchors for this run.")

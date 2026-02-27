@@ -16,6 +16,6 @@ class GoldenSet(BaseModel):
     version: str = Field(..., min_length=1)
     scenario_id: str = Field(..., min_length=1)
     dataset_id: str = Field(..., min_length=1)
-    seed: int | None = Field(None)
+    seed: int | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.now)
     anchors: list[GoldenAnchor] = Field(..., min_length=1)

@@ -20,3 +20,9 @@ class GoldenSetNotFoundError(AnchorDomainError):
     """Raised when a specified golden set file cannot be found."""
 
     pass
+
+
+class RunNotFoundError(ValueError):
+    """Raised when an evaluation run cannot be found."""
+
+    pass
