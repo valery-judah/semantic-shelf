@@ -1,4 +1,5 @@
-from enum import Enum
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -44,12 +45,35 @@ class SliceMetrics(BaseModel):
     latency: LatencyMetrics
 
 
+class MetricBucket(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    impressions: int = Field(0, ge=0)
+    clicks: int = Field(0, ge=0)
+    ctr_at_k: float | None = None
+    ctr_by_position: dict[int | str, float | None] = Field(default_factory=dict)
+    coverage: dict[str, int] = Field(default_factory=dict)
+
+
+class QualityMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    k: int = Field(10, ge=1)
+    by_traffic_type: dict[str, MetricBucket] = Field(default_factory=dict)
+
+
+class QualityMetricsStatus(StrEnum):
+    computed_from_extract = "computed_from_extract"
+    computed_from_db_then_exported = "computed_from_db_then_exported"
+    no_telemetry = "no_telemetry"
+
+
 class RunSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     run_id: str = Field(..., min_length=1, description="Evaluation run identifier.")
     summary_schema_version: str = Field(
-        "1.0", min_length=1, description="Schema version for this summary payload."
+        "1.1.0", min_length=1, description="Schema version for this summary payload."
     )
     counts: EvaluationCounts = Field(
         default_factory=EvaluationCounts, description="Aggregate counts for the run."
@@ -59,4 +83,13 @@ class RunSummary(BaseModel):
     )
     slices: list[SliceMetrics] = Field(
         default_factory=list, description="Metrics breakdown by slice."
+    )
+    quality_metrics: QualityMetrics | None = Field(
+        None, description="Quality metrics derived from telemetry."
+    )
+    quality_metrics_status: QualityMetricsStatus | None = Field(
+        None, description="Provenance of the quality metrics."
+    )
+    quality_metrics_notes: list[str] | None = Field(
+        None, description="Warnings or notes about the quality metrics."
     )

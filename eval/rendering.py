@@ -83,9 +83,12 @@ def generate_report(
         sample_link = f"`{samples[0]}`" if samples else "N/A"
         lines.append(f"| `{anchor_id}` | {latency_ms:.1f} | {sample_link} |")
 
+    section_num = 5
+
     if summary.slices:
         lines.append("")
-        lines.append("## 5. Slice Metrics")
+        lines.append(f"## {section_num}. Slice Metrics")
+        section_num += 1
         lines.append("| Slice ID | Count | Correctness | P50 | P95 | P99 |")
         lines.append("|----------|-------|-------------|-----|-----|-----|")
         for s in summary.slices:
@@ -96,9 +99,55 @@ def generate_report(
                 f"{fmt_lat(s.latency.p99_ms)} |"
             )
 
+    if summary.quality_metrics:
+        lines.append("")
+        lines.append(f"## {section_num}. Quality Metrics (Telemetry)")
+        section_num += 1
+        
+        status_msg = str(summary.quality_metrics_status) if summary.quality_metrics_status else "N/A"
+        lines.append(f"- **Status**: `{status_msg}`")
+        
+        qm = summary.quality_metrics
+        lines.append(f"- **K**: {qm.k}")
+        
+        if not qm.by_traffic_type:
+            lines.append("- *No telemetry data available*")
+        else:
+            for bucket_name, bucket in qm.by_traffic_type.items():
+                if bucket.impressions == 0:
+                    continue
+                
+                lines.append(f"### Traffic Type: {bucket_name.capitalize()}")
+                
+                if bucket.impressions < 100:
+                    lines.append(f"⚠️ **Data Sufficiency Warning**: Impressions ({bucket.impressions}) < 100. Metrics may be unreliable.")
+                
+                lines.append(f"- **Impressions**: {bucket.impressions}")
+                lines.append(f"- **Clicks**: {bucket.clicks}")
+                
+                ctr_at_k = f"{bucket.ctr_at_k:.4f}" if bucket.ctr_at_k is not None else "N/A"
+                lines.append(f"- **CTR@{qm.k}**: {ctr_at_k}")
+                
+                if bucket.ctr_by_position:
+                    lines.append("")
+                    lines.append("#### CTR by Position")
+                    lines.append("| Position | CTR |")
+                    lines.append("|----------|-----|")
+                    for pos in sorted([p for p in bucket.ctr_by_position.keys() if isinstance(p, int)]) + [p for p in bucket.ctr_by_position.keys() if isinstance(p, str)]:
+                        ctr = bucket.ctr_by_position[pos]
+                        ctr_str = f"{ctr:.4f}" if ctr is not None else "N/A"
+                        lines.append(f"| {pos} | {ctr_str} |")
+                        
+                if bucket.coverage:
+                    lines.append("")
+                    lines.append("#### Coverage Details")
+                    for k, v in bucket.coverage.items():
+                        lines.append(f"- **{k}**: {v}")
+
     if deltas:
         lines.append("")
-        lines.append("## 6. Paired Analysis")
+        lines.append(f"## {section_num}. Paired Analysis")
+        section_num += 1
         stats = deltas.get("stats", {})
         lines.append(f"- **Paired Count:** {stats.get('count', 0)}")
         lines.append(f"- **Avg Latency Delta:** {stats.get('avg_latency_delta_ms', 0.0):.2f} ms")
@@ -128,18 +177,20 @@ def generate_report(
                     )
 
     lines.append("")
-    lines.append("## 7. Artifacts")
+    lines.append(f"## {section_num}. Artifacts")
+    section_num += 1
     lines.append("- `run.json`")
     lines.append("- `summary/summary.json`")
     lines.append("- `raw/anchors.json`")
     lines.append("- `raw/loadgen_results.json`")
     lines.append("- `raw/validation_failures.jsonl`")
     lines.append("- `raw/requests.jsonl`")
+    lines.append("- `raw/telemetry_extract.jsonl`")
     if debug_files:
         lines.append("- `raw/sample_requests/...`")
 
     lines.append("")
-    lines.append("## 6. How to reproduce")
+    lines.append(f"## {section_num}. How to reproduce")
     lines.append(f"- `uv run python eval/evaluator.py --run-id {run_meta.run_id}`")
     lines.append(
         "- `uv run python eval/compare.py --scenario "

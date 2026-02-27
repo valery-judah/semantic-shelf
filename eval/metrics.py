@@ -5,7 +5,14 @@ from typing import Any
 from eval.parsers.requests_parser import iter_request_records
 from eval.schemas.raw import LoadgenResults, RequestRecord, ValidationFailure
 from eval.schemas.run import RunMetadata
-from eval.schemas.summary import EvaluationCounts, LatencyMetrics, RunSummary
+from eval.schemas.summary import (
+    EvaluationCounts,
+    LatencyMetrics,
+    MetricBucket,
+    QualityMetrics,
+    RunSummary,
+)
+from eval.telemetry import TelemetryEvent
 
 
 def compute_metrics_from_records(
@@ -78,7 +85,6 @@ def build_summary(
 
     return RunSummary(
         run_id=run_meta.run_id,
-        summary_schema_version="1.0.0",
         counts=EvaluationCounts(
             total_requests=total_requests,
             successful_requests=passed_requests,
@@ -94,6 +100,9 @@ def build_summary(
             p95_ms=latency_data.p95,
             p99_ms=latency_data.p99,
         ),
+        quality_metrics=None,
+        quality_metrics_status=None,
+        quality_metrics_notes=None,
     )
 
 
@@ -122,7 +131,7 @@ def find_worst_latency_anchors(requests_path: Path, n: int = 5) -> list[tuple[st
 
 
 def compute_paired_deltas(requests: list[RequestRecord]) -> list[dict[str, Any]]:
-    pairs = defaultdict(dict)
+    pairs: dict[str, dict[str, RequestRecord]] = defaultdict(dict)
     for r in requests:
         if getattr(r, "phase", "steady_state") == "steady_state":
             if r.paired_key and r.arm:
@@ -143,3 +152,146 @@ def compute_paired_deltas(requests: list[RequestRecord]) -> list[dict[str, Any]]
                 }
             )
     return paired_deltas
+
+
+def compute_quality_metrics(events: list[TelemetryEvent], k: int = 10) -> QualityMetrics:
+    """
+    Computes quality metrics (like CTR@K, CTR by position) from telemetry events.
+    """
+    # 1. Deduplicate events
+    # Rule: Treat DB uniqueness on idempotency_key as canonical dedupe;
+    # evaluator-side dedupe is defensive-only and must be deterministic.
+    unique_events: dict[tuple[str, str], TelemetryEvent] = {}
+    for event in events:
+        key = (event.event_type, event.payload.idempotency_key)
+        # Use first seen to be deterministic (events are typically sorted by ID from DB)
+        if key not in unique_events:
+            unique_events[key] = event
+
+    deduped_events = list(unique_events.values())
+
+    # 2. Split by traffic type
+    buckets_data: dict[str, dict[str, list[TelemetryEvent]]] = {
+        "synthetic": {"impressions": [], "clicks": []},
+        "real": {"impressions": [], "clicks": []},
+        "combined": {"impressions": [], "clicks": []},
+    }
+
+    for event in deduped_events:
+        bucket_name = "synthetic" if event.is_synthetic else "real"
+
+        if event.event_type == "similar_impression":
+            buckets_data[bucket_name]["impressions"].append(event)
+            buckets_data["combined"]["impressions"].append(event)
+        elif event.event_type == "similar_click":
+            buckets_data[bucket_name]["clicks"].append(event)
+            buckets_data["combined"]["clicks"].append(event)
+
+    # 3. Compute metrics per bucket
+    result_buckets: dict[str, MetricBucket] = {}
+    for b_name, data in buckets_data.items():
+        if not data["impressions"] and not data["clicks"]:
+            continue
+
+        result_buckets[b_name] = _compute_bucket_metrics(
+            impressions=data["impressions"],
+            clicks=data["clicks"],
+            k=k,
+        )
+
+    return QualityMetrics(k=k, by_traffic_type=result_buckets)
+
+
+def _compute_bucket_metrics(
+    impressions: list[TelemetryEvent], clicks: list[TelemetryEvent], k: int
+) -> MetricBucket:
+    """
+    Computes metrics for a specific bucket of impressions and clicks.
+    """
+    # Index impressions by (request_id, anchor_book_id) for matching
+    imp_map: dict[tuple[str, str | None], TelemetryEvent] = {}
+    for imp in impressions:
+        key = (imp.payload.request_id, imp.payload.anchor_book_id)
+        if key not in imp_map:
+            imp_map[key] = imp
+
+    total_impressions = len(impressions)
+    total_clicks = len(clicks)
+
+    impressions_with_position_lt_k = 0
+    matched_clicks_at_positions_lt_k = 0
+
+    impressions_at_position: dict[int, int] = {}
+    clicks_at_position: dict[int, int] = {}
+
+    # Process impressions to get denominators
+    for imp in impressions:
+        shown = imp.payload.shown_book_ids or []
+        positions = imp.payload.positions or []
+
+        has_pos_lt_k = any(p < k for p in positions)
+        if has_pos_lt_k:
+            impressions_with_position_lt_k += 1
+
+        for pos in positions:
+            impressions_at_position[pos] = impressions_at_position.get(pos, 0) + 1
+
+    matched_clicks = 0
+
+    # Process clicks to get numerators
+    for click in clicks:
+        c_req_id = click.payload.request_id
+        c_anchor = click.payload.anchor_book_id
+        c_clicked = click.payload.clicked_book_id
+        c_pos = click.payload.position
+
+        if c_pos is None or c_clicked is None:
+            continue
+
+        key = (c_req_id, c_anchor)
+        matched_imp = imp_map.get(key)
+
+        if not matched_imp:
+            # Unmatched click
+            continue
+
+        # Verify it matches the impression's shown books
+        shown = matched_imp.payload.shown_book_ids or []
+        positions = matched_imp.payload.positions or []
+
+        is_match = False
+        for s_book, s_pos in zip(shown, positions, strict=False):
+            if s_book == c_clicked and s_pos == c_pos:
+                is_match = True
+                break
+
+        if is_match:
+            matched_clicks += 1
+            clicks_at_position[c_pos] = clicks_at_position.get(c_pos, 0) + 1
+            if c_pos < k:
+                matched_clicks_at_positions_lt_k += 1
+
+    # Calculate CTR@K
+    ctr_at_k = None
+    if impressions_with_position_lt_k > 0:
+        ctr_at_k = matched_clicks_at_positions_lt_k / impressions_with_position_lt_k
+
+    # Calculate CTR by position
+    ctr_by_position: dict[int | str, float | None] = {}
+    for pos, imp_count in impressions_at_position.items():
+        c_count = clicks_at_position.get(pos, 0)
+        ctr_by_position[pos] = c_count / imp_count if imp_count > 0 else 0.0
+
+    coverage = {
+        "impressions_with_position_lt_k": impressions_with_position_lt_k,
+        "matched_clicks": matched_clicks,
+        "matched_clicks_at_positions_lt_k": matched_clicks_at_positions_lt_k,
+    }
+
+    return MetricBucket(
+        impressions=total_impressions,
+        clicks=total_clicks,
+        ctr_at_k=ctr_at_k,
+        ctr_by_position=ctr_by_position,
+        coverage=coverage,
+    )

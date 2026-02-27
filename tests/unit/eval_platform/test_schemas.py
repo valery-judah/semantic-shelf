@@ -88,10 +88,47 @@ def test_run_summary_schema_valid() -> None:
         "latency": {"p50_ms": 10.5, "p95_ms": 50.0, "p99_ms": 100.2},
     }
     model = RunSummary(**data)
-    assert model.summary_schema_version == "1.0"
+    assert model.summary_schema_version == "1.1.0"
     assert model.run_id == "run_abc"
     assert model.counts.total_requests == 100
     assert model.latency.p99_ms == 100.2
+    assert model.quality_metrics is None
+
+
+def test_run_summary_schema_with_quality_metrics() -> None:
+    data = {
+        "run_id": "run_metrics",
+        "summary_schema_version": "1.1.0",
+        "counts": {
+            "total_requests": 10,
+            "successful_requests": 10,
+            "failed_requests": 0,
+            "error_rate": 0.0,
+            "timeouts": 0,
+            "correctness_failures": 0,
+        },
+        "latency": {"p50_ms": 10.0, "p95_ms": 20.0, "p99_ms": 30.0},
+        "quality_metrics": {
+            "k": 10,
+            "by_traffic_type": {
+                "synthetic": {
+                    "impressions": 100,
+                    "clicks": 5,
+                    "ctr_at_k": 0.05,
+                    "ctr_by_position": {"0": 0.01, "1": 0.0},
+                    "coverage": {"matched_clicks": 5},
+                }
+            },
+        },
+        "quality_metrics_status": "computed_from_extract",
+        "quality_metrics_notes": ["Low volume"],
+    }
+    model = RunSummary(**data)
+    assert model.quality_metrics is not None
+    assert model.quality_metrics.k == 10
+    assert model.quality_metrics.by_traffic_type["synthetic"].impressions == 100
+    assert model.quality_metrics_status == "computed_from_extract"
+    assert model.quality_metrics_notes == ["Low volume"]
 
 
 def test_raw_schemas_valid() -> None:

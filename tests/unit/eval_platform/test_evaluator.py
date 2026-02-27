@@ -122,8 +122,9 @@ def test_evaluator_writes_summary(monkeypatch, tmp_path: Path) -> None:
     assert "- **Traffic Mode:** `request_count=2`" in report_content
     assert "## 3. Correctness" in report_content
     assert "## 4. Performance" in report_content
-    assert "## 7. Artifacts" in report_content
-    assert "## 6. How to reproduce" in report_content
+    assert "## 5. Quality Metrics (Telemetry)" in report_content
+    assert "## 6. Artifacts" in report_content
+    assert "## 7. How to reproduce" in report_content
     assert f"uv run python eval/evaluator.py --run-id {run_id}" in report_content
 
 
@@ -492,6 +493,102 @@ def test_evaluator_outputs_are_byte_stable_across_repeated_runs(
     assert "| `c` | 100.0 | `raw/sample_requests/c/req-c-1.json` |" in second_report
     assert second_report.index("| `a` | 100.0 |") < second_report.index("| `b` | 100.0 |")
     assert second_report.index("| `b` | 100.0 |") < second_report.index("| `c` | 100.0 |")
+
+
+def test_evaluator_handles_telemetry_extract_and_metrics(monkeypatch, tmp_path: Path) -> None:
+    run_id = "run_telemetry"
+    base_dir = tmp_path / "artifacts" / "eval" / run_id
+    _write_run_fixture(base_dir, run_id)
+    _write_scenario_file(tmp_path)
+
+    raw_dir = base_dir / "raw"
+    telemetry_events = [
+        {
+            "event_name": "similar_impression",
+            "run_id": run_id,
+            "is_synthetic": True,
+            "ts": "2026-02-26T00:00:00+00:00",
+            "payload": {
+                "request_id": "req-1",
+                "idempotency_key": "k1",
+                "anchor_book_id": "1",
+                "shown_book_ids": ["A", "B"],
+                "positions": [0, 1]
+            }
+        },
+        {
+            "event_name": "similar_click",
+            "run_id": run_id,
+            "is_synthetic": True,
+            "ts": "2026-02-26T00:00:01+00:00",
+            "payload": {
+                "request_id": "req-1",
+                "idempotency_key": "k2",
+                "anchor_book_id": "1",
+                "clicked_book_id": "A",
+                "position": 0
+            }
+        }
+    ]
+    with (raw_dir / "telemetry_extract.jsonl").open("w", encoding="utf-8") as f:
+        for event in telemetry_events:
+            f.write(json.dumps(event) + "\n")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["evaluator.py", "--run-id", run_id])
+
+    evaluator.main()
+
+    summary_path = base_dir / "summary" / "summary.json"
+    assert summary_path.exists()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    
+    assert summary["quality_metrics_status"] == "computed_from_extract"
+    qm = summary["quality_metrics"]
+    assert qm["k"] == 10
+    assert "synthetic" in qm["by_traffic_type"]
+    synth = qm["by_traffic_type"]["synthetic"]
+    assert synth["impressions"] == 1
+    assert synth["clicks"] == 1
+    assert synth["ctr_at_k"] == 1.0
+    assert synth["ctr_by_position"]["0"] == 1.0
+
+    report_path = base_dir / "report" / "report.md"
+    assert report_path.exists()
+    report_content = report_path.read_text(encoding="utf-8")
+    assert "Quality Metrics (Telemetry)" in report_content
+    assert "computed_from_extract" in report_content
+    assert "Traffic Type: Synthetic" in report_content
+    assert "**Impressions**: 1" in report_content
+    assert "**Clicks**: 1" in report_content
+    assert "**CTR@10**: 1.0000" in report_content
+
+
+def test_evaluator_malformed_telemetry_extract_degrades_to_no_telemetry(
+    monkeypatch, tmp_path: Path
+) -> None:
+    run_id = "run_bad_extract"
+    base_dir = tmp_path / "artifacts" / "eval" / run_id
+    _write_run_fixture(base_dir, run_id)
+    _write_scenario_file(tmp_path)
+
+    raw_dir = base_dir / "raw"
+    # Missing required fields for telemetry schema validation.
+    (raw_dir / "telemetry_extract.jsonl").write_text(
+        json.dumps({"event_name": "similar_impression"}) + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["evaluator.py", "--run-id", run_id])
+
+    evaluator.main()
+
+    summary_path = base_dir / "summary" / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["quality_metrics_status"] == "no_telemetry"
+    assert summary["quality_metrics_notes"]
+    assert "Failed to parse telemetry extract:" in summary["quality_metrics_notes"][0]
 
 
 def test_extract_debug_bundles_respects_per_anchor_cap(tmp_path: Path) -> None:

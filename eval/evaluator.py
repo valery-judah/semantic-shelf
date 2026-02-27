@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from eval.metrics import build_summary as _build_summary
 from eval.metrics import compute_metrics_from_records, compute_paired_deltas
+from eval.metrics import compute_quality_metrics as _compute_quality_metrics
 from eval.metrics import find_worst_latency_anchors as _find_worst_latency_anchors
 from eval.metrics import get_top_failing_anchors as _get_top_failing_anchors
 from eval.parsers import (
@@ -37,8 +38,9 @@ from eval.schemas.raw import (
 from eval.schemas.run import RunMetadata
 from eval.schemas.scenario import ScenarioConfig
 from eval.schemas.slice import SliceConfig
-from eval.schemas.summary import RunSummary, SliceMetrics
+from eval.schemas.summary import QualityMetricsStatus, RunSummary, SliceMetrics
 from eval.slicing import get_slice_membership
+from eval.telemetry import export_telemetry_extract, read_telemetry_extract
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -247,6 +249,38 @@ def main() -> None:
                 )
 
             summary.slices = slice_metrics_list
+
+        # Quality Metrics (Telemetry) computation
+        telemetry_extract_path = raw_dir / "telemetry_extract.jsonl"
+        quality_metrics_status = None
+        
+        if not telemetry_extract_path.exists():
+            try:
+                export_telemetry_extract(args.run_id, base_dir.parent)
+                if telemetry_extract_path.exists():
+                    quality_metrics_status = QualityMetricsStatus.computed_from_db_then_exported
+            except Exception as exc:
+                logger.warning("Failed to export telemetry from DB: %s", exc)
+        else:
+            quality_metrics_status = QualityMetricsStatus.computed_from_extract
+
+        if telemetry_extract_path.exists():
+            try:
+                telemetry_events = read_telemetry_extract(telemetry_extract_path)
+            except (ValidationError, ValueError) as exc:
+                logger.warning("Failed to parse telemetry extract; skipping quality metrics: %s", exc)
+                summary.quality_metrics = _compute_quality_metrics([])
+                summary.quality_metrics_status = QualityMetricsStatus.no_telemetry
+                summary.quality_metrics_notes = [
+                    f"Failed to parse telemetry extract: {exc}",
+                ]
+            else:
+                quality_metrics = _compute_quality_metrics(telemetry_events)
+                summary.quality_metrics = quality_metrics
+                summary.quality_metrics_status = quality_metrics_status
+        else:
+            summary.quality_metrics = _compute_quality_metrics([])
+            summary.quality_metrics_status = QualityMetricsStatus.no_telemetry
 
         # Paired deltas computation
         paired_deltas = []
