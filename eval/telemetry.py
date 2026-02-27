@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from books_rec_api.database import SessionLocal
 from books_rec_api.models import TelemetryEvent as DbTelemetryEvent
@@ -33,13 +34,14 @@ class TelemetryEvent(BaseModel):
     payload: TelemetryPayload
 
 
-def export_telemetry_extract(run_id: str, base_dir: Path) -> Path:
+def export_telemetry_extract(run_id: str, base_dir: Path, session: Session | None = None) -> Path:
     """
     Exports telemetry events for a specific run from the database to a JSONL file.
 
     Args:
         run_id: The run ID to export.
         base_dir: The base directory for eval artifacts (e.g. artifacts/eval).
+        session: An optional SQLAlchemy session to use (useful for testing).
 
     Returns:
         The path to the generated JSONL file.
@@ -48,7 +50,11 @@ def export_telemetry_extract(run_id: str, base_dir: Path) -> Path:
     extract_dir.mkdir(parents=True, exist_ok=True)
     extract_path = extract_dir / "telemetry_extract.jsonl"
 
-    with SessionLocal() as session:
+    if session is None:
+        with SessionLocal() as db_session:
+            stmt = select(DbTelemetryEvent).where(DbTelemetryEvent.run_id == run_id)
+            events = db_session.scalars(stmt).all()
+    else:
         stmt = select(DbTelemetryEvent).where(DbTelemetryEvent.run_id == run_id)
         events = session.scalars(stmt).all()
 

@@ -522,10 +522,9 @@ Required fields (conceptually):
 - `is_synthetic` (mandatory when synthetic)
 - idempotency key / unique constraint basis
 
-Compatibility note:
-- If earlier telemetry used `eval_run_id`, Stage 6 must include an explicit migration:
-  - one-time backfill/rename for stored telemetry, and/or
-  - temporary dual-read/dual-write compatibility during rollout.
+Contract note:
+- Stage 6 telemetry ingestion is strict: producers must send `run_id`.
+- `eval_run_id` alias compatibility is intentionally not supported.
 
 **D6.2 Storage**
 

@@ -32,9 +32,9 @@ Based on the current implementation state of `docs/eval-platform-6.md` and the e
     *   `[x] summary/report quality section added`
 *   [ ] Update `docs/eval-platform-staged.md` (if applicable) to mark Stage 6 as complete.
 
-### 4. Phase E: Compatibility Cleanup (Future/Optional)
+### 4. Contract Strictness Verification
 
-*   [ ] Review if any transitional `eval_run_id` to `run_id` compatibility mapping exists in `src/books_rec_api/services/telemetry_service.py` or the API payload schema. If present, plan its removal for a future release cycle.
+*   [ ] Confirm telemetry ingestion requires `run_id` and rejects `eval_run_id`-only payloads with validation errors.
 
 ## Acceptance Criteria
 

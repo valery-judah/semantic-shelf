@@ -21,7 +21,7 @@ Stage 6 is constrained by these principles from `docs/eval-platform.md`:
 Current repo behavior (implemented in this step):
 
 - `/telemetry/events` validates payloads, persists rows into `telemetry_events`, and logs structured events.
-- Telemetry schema includes Stage 6 required fields (`telemetry_schema_version`, `run_id`, `arm`, `is_synthetic`, `idempotency_key`) with `eval_run_id` compatibility.
+- Telemetry schema includes Stage 6 required fields (`telemetry_schema_version`, `run_id`, `arm`, `is_synthetic`, `idempotency_key`) with strict `run_id` validation (no alias compatibility).
 - `telemetry_events` exists in SQLAlchemy model + Alembic migration with run/event/request indices and unique `idempotency_key`.
 - Idempotent insert uses `ON CONFLICT (idempotency_key) DO NOTHING` and returns inserted/duplicate counts.
 - Unit and integration tests cover repository insert mapping, idempotency dedupe, and API persistence response shape.
@@ -75,15 +75,6 @@ Validation rules:
 - click `position` is non-negative.
 - `request_id` and `run_id` are non-empty strings.
 - `idempotency_key` is non-empty and deterministic for retries.
-
-### 1.2 Compatibility plan (`eval_run_id` -> `run_id`)
-
-If any existing producers use `eval_run_id`:
-
-- API accepts `eval_run_id` during transition window.
-- Service canonicalizes to `run_id` before persistence.
-- Add deprecation log warning when `eval_run_id` is seen.
-- Remove compatibility path after one release cycle.
 
 ## 2) Storage Model and DB Migration
 
@@ -139,7 +130,7 @@ Add repository for telemetry persistence (new module):
 Update service (`TelemetryService`) responsibilities:
 
 - validation stays at schema layer
-- canonicalize compatibility fields
+- enforce strict `run_id` contract (reject `eval_run_id` alias payloads)
 - map schema -> DB row
 - call repository bulk insert
 - emit structured ingest summary logs
@@ -227,10 +218,6 @@ Report updates in `eval/rendering.py`:
 - add quality section to summary/report
 - keep quality as soft signal (no hard CI gate)
 
-### Phase E: Compatibility cleanup
-
-- remove `eval_run_id` compatibility once all producers migrated
-
 ## 7) Testing Plan
 
 ## 7.1 Unit tests
@@ -244,7 +231,7 @@ Report updates in `eval/rendering.py`:
 
 - `POST /telemetry/events` persists rows and returns accepted
 - duplicate event posts do not increase row count
-- compatibility input (`eval_run_id`) maps to `run_id` during transition
+- old alias payloads (`eval_run_id` without `run_id`) are rejected with validation error
 
 ## 7.3 Eval-platform tests
 
@@ -296,7 +283,7 @@ Primary files expected to change:
 - Mitigation: queue-based asynchronous telemetry emission with bounded queue and drop-on-full semantics.
 
 - Risk: schema churn breaks producers.
-- Mitigation: versioned schema and temporary compatibility path.
+- Mitigation: versioned schema and explicit contract (`run_id` required, no alias support).
 
 - Risk: evaluator/DB coupling harms local reproducibility.
 - Mitigation: always export `telemetry_extract.jsonl` and allow offline recomputation from extract.
@@ -307,8 +294,8 @@ Primary files expected to change:
 - [x] `telemetry_events` table + indices + unique constraint added
 - [x] idempotent DB writes implemented
 - [x] loadgen synthetic telemetry emission implemented
-- [ ] evaluator telemetry query by `run_id` implemented
-- [ ] `raw/telemetry_extract.jsonl` generated
-- [ ] summary/report quality section added
+- [x] evaluator telemetry query by `run_id` implemented
+- [x] `raw/telemetry_extract.jsonl` generated
+- [x] summary/report quality section added
 - [x] tests added/updated and passing (`make test`)
 - [x] docs updated where Stage 6 completion state is tracked
