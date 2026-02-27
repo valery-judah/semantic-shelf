@@ -104,6 +104,10 @@ def test_ingest_telemetry_events_invalid_payload(client: TestClient):
 
 
 def test_ingest_telemetry_events_rejects_eval_run_id_only_payload(client: TestClient):
+    """
+    Ensures that payloads containing only `eval_run_id` are explicitly rejected.
+    As per Stage 6 contract, we do not support alias compatibility; `run_id` is strictly required.
+    """
     payload = {
         "events": [
             {

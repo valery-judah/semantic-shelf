@@ -205,6 +205,10 @@ def test_telemetry_service_process_events(caplog):
 
 
 def test_event_with_eval_run_id_only_is_rejected():
+    """
+    Ensures that payloads containing only `eval_run_id` are explicitly rejected.
+    As per Stage 6 contract, we do not support alias compatibility; `run_id` is strictly required.
+    """
     payload = {
         "event_name": "similar_click",
         "ts": "2026-02-25T19:00:00Z",
