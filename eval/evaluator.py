@@ -253,7 +253,7 @@ def main() -> None:
         # Quality Metrics (Telemetry) computation
         telemetry_extract_path = raw_dir / "telemetry_extract.jsonl"
         quality_metrics_status = None
-        
+
         if not telemetry_extract_path.exists():
             try:
                 export_telemetry_extract(args.run_id, base_dir.parent)
@@ -268,7 +268,9 @@ def main() -> None:
             try:
                 telemetry_events = read_telemetry_extract(telemetry_extract_path)
             except (ValidationError, ValueError) as exc:
-                logger.warning("Failed to parse telemetry extract; skipping quality metrics: %s", exc)
+                logger.warning(
+                    "Failed to parse telemetry extract; skipping quality metrics: %s", exc
+                )
                 summary.quality_metrics = _compute_quality_metrics([])
                 summary.quality_metrics_status = QualityMetricsStatus.no_telemetry
                 summary.quality_metrics_notes = [

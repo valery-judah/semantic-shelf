@@ -12,3 +12,8 @@ validations:
     - "similar_book_ids"
   no_duplicates: true
   anchor_not_in_results: true
+telemetry:
+  emit_telemetry: true
+  telemetry_mode: "synthetic"
+  click_model: "fixed_ctr"
+  fixed_ctr: 0.1

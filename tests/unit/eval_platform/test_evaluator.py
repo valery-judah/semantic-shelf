@@ -513,8 +513,8 @@ def test_evaluator_handles_telemetry_extract_and_metrics(monkeypatch, tmp_path: 
                 "idempotency_key": "k1",
                 "anchor_book_id": "1",
                 "shown_book_ids": ["A", "B"],
-                "positions": [0, 1]
-            }
+                "positions": [0, 1],
+            },
         },
         {
             "event_name": "similar_click",
@@ -526,9 +526,9 @@ def test_evaluator_handles_telemetry_extract_and_metrics(monkeypatch, tmp_path: 
                 "idempotency_key": "k2",
                 "anchor_book_id": "1",
                 "clicked_book_id": "A",
-                "position": 0
-            }
-        }
+                "position": 0,
+            },
+        },
     ]
     with (raw_dir / "telemetry_extract.jsonl").open("w", encoding="utf-8") as f:
         for event in telemetry_events:
@@ -542,7 +542,7 @@ def test_evaluator_handles_telemetry_extract_and_metrics(monkeypatch, tmp_path: 
     summary_path = base_dir / "summary" / "summary.json"
     assert summary_path.exists()
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    
+
     assert summary["quality_metrics_status"] == "computed_from_extract"
     qm = summary["quality_metrics"]
     assert qm["k"] == 10

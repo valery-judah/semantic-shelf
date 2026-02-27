@@ -103,41 +103,47 @@ def generate_report(
         lines.append("")
         lines.append(f"## {section_num}. Quality Metrics (Telemetry)")
         section_num += 1
-        
-        status_msg = str(summary.quality_metrics_status) if summary.quality_metrics_status else "N/A"
+
+        status_msg = (
+            str(summary.quality_metrics_status) if summary.quality_metrics_status else "N/A"
+        )
         lines.append(f"- **Status**: `{status_msg}`")
-        
+
         qm = summary.quality_metrics
         lines.append(f"- **K**: {qm.k}")
-        
+
         if not qm.by_traffic_type:
             lines.append("- *No telemetry data available*")
         else:
             for bucket_name, bucket in qm.by_traffic_type.items():
                 if bucket.impressions == 0:
                     continue
-                
+
                 lines.append(f"### Traffic Type: {bucket_name.capitalize()}")
-                
+
                 if bucket.impressions < 100:
-                    lines.append(f"⚠️ **Data Sufficiency Warning**: Impressions ({bucket.impressions}) < 100. Metrics may be unreliable.")
-                
+                    lines.append(
+                        f"⚠️ **Data Sufficiency Warning**: Impressions ({bucket.impressions}) < 100. Metrics may be unreliable."
+                    )
+
                 lines.append(f"- **Impressions**: {bucket.impressions}")
                 lines.append(f"- **Clicks**: {bucket.clicks}")
-                
+
                 ctr_at_k = f"{bucket.ctr_at_k:.4f}" if bucket.ctr_at_k is not None else "N/A"
                 lines.append(f"- **CTR@{qm.k}**: {ctr_at_k}")
-                
+
                 if bucket.ctr_by_position:
                     lines.append("")
                     lines.append("#### CTR by Position")
                     lines.append("| Position | CTR |")
                     lines.append("|----------|-----|")
-                    for pos in sorted([p for p in bucket.ctr_by_position.keys() if isinstance(p, int)]) + [p for p in bucket.ctr_by_position.keys() if isinstance(p, str)]:
+                    for pos in sorted(
+                        [p for p in bucket.ctr_by_position.keys() if isinstance(p, int)]
+                    ) + [p for p in bucket.ctr_by_position.keys() if isinstance(p, str)]:
                         ctr = bucket.ctr_by_position[pos]
                         ctr_str = f"{ctr:.4f}" if ctr is not None else "N/A"
                         lines.append(f"| {pos} | {ctr_str} |")
-                        
+
                 if bucket.coverage:
                     lines.append("")
                     lines.append("#### Coverage Details")

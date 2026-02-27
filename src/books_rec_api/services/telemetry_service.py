@@ -23,13 +23,6 @@ class TelemetryService:
         insert_result = self._repo.bulk_insert_events(events)
 
         for event in events:
-            if getattr(event, "eval_run_id", None) is not None:
-                logger.warning(
-                    "Deprecated field 'eval_run_id' used in telemetry event %s. "
-                    "Use 'run_id' instead.",
-                    event.event_name,
-                )
-
             # Convert the model to a dictionary, ensuring datetime objects are serialized
             event_dict = event.model_dump(mode="json")
             # Emit as a structured JSON log that the log shipper will identify

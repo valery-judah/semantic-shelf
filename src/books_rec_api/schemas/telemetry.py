@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -13,7 +13,6 @@ class TelemetryEventBase(BaseModel):
         min_length=1, description="Join key, matching the trace_id from the API"
     )
     run_id: str = Field(min_length=1, description="The evaluation run identifier")
-    eval_run_id: str | None = Field(default=None, description="Deprecated. Use run_id instead.")
     surface: str = Field(description="The UI surface where recommendations were shown")
     arm: Literal["baseline", "candidate", "unknown"] = Field(
         description="The experiment arm associated with the event"
@@ -33,14 +32,6 @@ class TelemetryEventBase(BaseModel):
     bucket_key_hash: str | None = Field(
         default=None, description="Pseudonymous hash of the assignment key"
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def canonicalize_run_id(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "eval_run_id" in data and "run_id" not in data:
-                data["run_id"] = data["eval_run_id"]
-        return data
 
 
 class SimilarImpressionEvent(TelemetryEventBase):

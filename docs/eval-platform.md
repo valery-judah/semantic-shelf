@@ -659,6 +659,27 @@ This will produce a report with:
 - Per-slice metrics (head/tail, language, etc.)
 - Paired delta analysis (candidate vs baseline latency and correctness)
 
+### Offline Reproducibility and Telemetry Extracts (Stage 6)
+
+The evaluator supports full offline reproducibility of quality metrics (e.g. CTR@K and position curves) using a `telemetry_extract.jsonl` artifact. 
+
+**Simulating an offline run:**
+
+1. Run an evaluation scenario that emits telemetry (e.g., `similar_books_smoke` with telemetry enabled):
+   ```bash
+   make ci-eval SCENARIO=similar_books_smoke
+   ```
+   *This populates the database with telemetry and generates `artifacts/eval/<run_id>/raw/telemetry_extract.jsonl`.*
+2. Stop the database to simulate an offline or isolated CI environment:
+   ```bash
+   docker compose stop db
+   ```
+3. Re-run the evaluator using the existing `run_id`:
+   ```bash
+   uv run python eval/evaluator.py --run-id <run_id>
+   ```
+4. Verify the evaluator successfully parses the JSONL extract and reproduces the exact same `summary.json` quality metrics without connecting to the database.
+
 ## CI integration and regression gating
 ### CI job outline
 

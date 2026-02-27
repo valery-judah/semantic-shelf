@@ -204,7 +204,7 @@ def test_telemetry_service_process_events(caplog):
     assert '"clicked_book_id": "B"' in caplog.text
 
 
-def test_telemetry_service_eval_run_id_deprecation_warning(caplog):
+def test_event_with_eval_run_id_only_is_rejected():
     payload = {
         "event_name": "similar_click",
         "ts": "2026-02-25T19:00:00Z",
@@ -220,19 +220,8 @@ def test_telemetry_service_eval_run_id_deprecation_warning(caplog):
         "clicked_book_id": "B",
         "position": 0,
     }
-    # Parsing should canonicalize eval_run_id -> run_id
-    event = SimilarClickEvent.model_validate(payload)
-    assert event.run_id == "run-compat"
-    assert event.eval_run_id == "run-compat"
-
-    repo = MagicMock()
-    repo.bulk_insert_events.return_value = TelemetryInsertResult(
-        inserted_count=1, duplicate_count=0
-    )
-    service = TelemetryService(repo=repo)
-    service.process_events([event])
-
-    assert "Deprecated field 'eval_run_id' used in telemetry event similar_click" in caplog.text
+    with pytest.raises(ValidationError):
+        SimilarClickEvent.model_validate(payload)
 
 
 def test_valid_similar_shelf_add_event_with_experiment_fields():
