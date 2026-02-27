@@ -342,6 +342,7 @@ def test_evaluator_outputs_are_byte_stable_across_repeated_runs(
     base_dir = tmp_path / "artifacts" / "eval" / run_id
     raw_dir = base_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "telemetry_extract.jsonl").write_text("", encoding="utf-8")
 
     _write_scenario_file(tmp_path)
 
