@@ -7,6 +7,7 @@ import pytest
 from httpx import Response
 
 from eval.loadgen import execute_request, run_load
+from eval.schemas.raw import Anchor
 from eval.schemas.scenario import ScenarioConfig, TelemetryConfig
 
 
@@ -342,7 +343,7 @@ async def test_run_load(tmp_path, mock_scenario_config):
             "run_123",
             "http://test",
             mock_scenario_config,
-            ["1", "2"],
+            [Anchor(id="1"), Anchor(id="2")],
             str(results_path),
             str(failures_path),
             str(requests_path),

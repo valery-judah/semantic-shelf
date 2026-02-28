@@ -209,11 +209,14 @@ def main() -> None:
 
         # Slice metrics computation
         slices_config = load_slices(repo_root)
-        if slices_config and anchors.anchor_metadata:
+        if slices_config and anchors.anchors:
+            anchor_map = {str(a.id): a for a in anchors.anchors}
             slice_requests = defaultdict(list)
             for req in requests:
-                meta = anchors.anchor_metadata.get(req.anchor_id, {})
-                member_slices = get_slice_membership(slices_config.slices, req.anchor_id, meta)
+                anchor = anchor_map.get(req.anchor_id)
+                if not anchor:
+                    continue
+                member_slices = get_slice_membership(slices_config.slices, anchor)
                 for s_id in member_slices:
                     slice_requests[s_id].append(req)
 

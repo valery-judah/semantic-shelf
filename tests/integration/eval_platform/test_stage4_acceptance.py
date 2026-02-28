@@ -71,7 +71,7 @@ def test_stage4_determinism_outputs(tmp_path: Path):
         build_summary,
         generate_report,
     )
-    from eval.schemas.raw import AnchorSelection, LoadgenResults
+    from eval.schemas.raw import Anchor, AnchorSelection, LoadgenResults
     from eval.schemas.run import RunMetadata
     from eval.schemas.scenario import ScenarioConfig
     from eval.schemas.summary import SliceMetrics
@@ -102,8 +102,10 @@ def test_stage4_determinism_outputs(tmp_path: Path):
         scenario_id="similar_books_paired",
         dataset_id="local_dev",
         seed=42,
-        anchors=["a1", "a2"],
-        anchor_metadata={"a1": {"language": "en"}, "a2": {"language": "es"}},
+        anchors=[
+            Anchor(id="a1", metadata={"language": "en"}),
+            Anchor(id="a2", metadata={"language": "es"}),
+        ],
     )
 
     loadgen_results = LoadgenResults(

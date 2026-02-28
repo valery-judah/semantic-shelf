@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from eval.schemas.raw import AnchorSelection, ValidationFailure
 
-ANCHORS_SCHEMA_VERSION = "1.0"
+ANCHORS_SCHEMA_VERSION = "2.0"
 
 
 def load_anchors(raw_dir: Path) -> AnchorSelection:

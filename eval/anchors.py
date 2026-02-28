@@ -1,11 +1,11 @@
 import random
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from eval.domain import AnchorId, DatasetId, GoldenId, ScenarioId
 from eval.errors import AnchorNotFoundError, ScenarioMismatchError
 from eval.repositories import default_golden_repo
+from eval.schemas.raw import Anchor
 
 
 class AnchorSelectionInputs(BaseModel):
@@ -15,12 +15,6 @@ class AnchorSelectionInputs(BaseModel):
     scenario_id: ScenarioId
     seed: int
     count: int = Field(ge=0)
-
-
-class Anchor(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: AnchorId
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 _ANCHOR_CATALOG: dict[DatasetId, dict[ScenarioId, list[AnchorId]]] = {
@@ -50,15 +44,14 @@ def _available_anchors(dataset_id: DatasetId, scenario_id: ScenarioId) -> list[A
     return [Anchor(id=aid) for aid in anchors]
 
 
-def select_anchors(inputs: AnchorSelectionInputs) -> tuple[list[str], dict[str, dict[str, Any]]]:
+def select_anchors(inputs: AnchorSelectionInputs) -> list[Anchor]:
     """
     Selects anchors based on deterministic shuffling.
     Returns:
-        A tuple of (anchors_list, metadata_dict) to remain compatible with existing
-        callers in Phase A.
+        A list of Anchor objects.
     """
     if inputs.count == 0:
-        return [], {}
+        return []
 
     available = _available_anchors(inputs.dataset_id, inputs.scenario_id)
 
@@ -69,10 +62,4 @@ def select_anchors(inputs: AnchorSelectionInputs) -> tuple[list[str], dict[str, 
     rng.shuffle(indices)
 
     selected_indices = indices[: min(inputs.count, len(indices))]
-    selected_anchors = [available[i] for i in selected_indices]
-
-    # Extract to legacy tuple shape for boundary compatibility
-    anchor_ids = [str(a.id) for a in selected_anchors]
-    metadata = {str(a.id): a.metadata for a in selected_anchors}
-
-    return anchor_ids, metadata
+    return [available[i] for i in selected_indices]

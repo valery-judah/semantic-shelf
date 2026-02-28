@@ -23,12 +23,12 @@ def _write_run_fixture(base_dir: Path, run_id: str) -> None:
     (base_dir / "run.json").write_text(json.dumps(run_payload), encoding="utf-8")
 
     anchors_payload = {
-        "anchors_schema_version": "1.0",
+        "anchors_schema_version": "2.0",
         "run_id": run_id,
         "scenario_id": "similar_books_smoke",
         "dataset_id": "local_dev",
         "seed": 42,
-        "anchors": ["1", "2"],
+        "anchors": [{"id": "1", "metadata": {}}, {"id": "2", "metadata": {}}],
     }
     (raw_dir / "anchors.json").write_text(json.dumps(anchors_payload), encoding="utf-8")
 
@@ -152,12 +152,16 @@ def test_evaluator_outputs_are_byte_stable_across_repeated_runs(
     (base_dir / "run.json").write_text(json.dumps(run_payload), encoding="utf-8")
 
     anchors_payload = {
-        "anchors_schema_version": "1.0",
+        "anchors_schema_version": "2.0",
         "run_id": run_id,
         "scenario_id": "similar_books_smoke",
         "dataset_id": "local_dev",
         "seed": 42,
-        "anchors": ["a", "b", "c"],
+        "anchors": [
+            {"id": "a", "metadata": {}},
+            {"id": "b", "metadata": {}},
+            {"id": "c", "metadata": {}},
+        ],
     }
     (raw_dir / "anchors.json").write_text(json.dumps(anchors_payload), encoding="utf-8")
 

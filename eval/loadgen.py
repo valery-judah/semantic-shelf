@@ -13,6 +13,7 @@ import yaml
 from pydantic import ValidationError
 
 from eval.schemas.raw import (
+    Anchor,
     AnchorSelection,
     LoadgenLatency,
     LoadgenResults,
@@ -296,7 +297,7 @@ async def run_load(
     run_id: str,
     api_url: str,
     scenario_config: ScenarioConfig,
-    anchors: list[str],
+    anchors: list[Anchor],
     results_path: str,
     failures_path: str,
     requests_path: str,
@@ -381,7 +382,8 @@ async def run_load(
                     # We use a simple atomic-like operation (single threaded event loop)
                     current_idx = next_anchor_idx
                     next_anchor_idx += 1
-                    anchor_id = anchors[current_idx % len(anchors)]
+                    anchor = anchors[current_idx % len(anchors)]
+                    anchor_id = str(anchor.id)
 
                     if scenario_config.paired_arms:
                         paired_key = uuid.uuid4().hex

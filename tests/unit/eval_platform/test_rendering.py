@@ -1,4 +1,5 @@
 from eval.evaluator import AnchorSelection, RunMetadata, RunSummary, generate_report
+from eval.schemas.raw import Anchor
 
 
 def test_report_includes_debug_pointer_for_each_listed_anchor() -> None:
@@ -13,12 +14,12 @@ def test_report_includes_debug_pointer_for_each_listed_anchor() -> None:
         anchor_count=3,
     )
     anchors = AnchorSelection(
-        anchors_schema_version="1.0",
+        anchors_schema_version="2.0",
         run_id="run_pointer_complete",
         scenario_id="similar_books_smoke",
         dataset_id="local_dev",
         seed=42,
-        anchors=["a", "b", "c"],
+        anchors=[Anchor(id="a"), Anchor(id="b"), Anchor(id="c")],
     )
     summary = RunSummary.model_validate(
         {

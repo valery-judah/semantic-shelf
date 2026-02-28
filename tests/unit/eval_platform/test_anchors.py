@@ -44,9 +44,8 @@ def test_select_anchors_zero_count_returns_empty() -> None:
     inputs = AnchorSelectionInputs(
         dataset_id="local_dev", scenario_id="similar_books_smoke", seed=42, count=0
     )
-    anchors, metadata = select_anchors(inputs)
+    anchors = select_anchors(inputs)
     assert anchors == []
-    assert metadata == {}
 
 
 def test_available_anchors_rejects_golden_scenario_mismatch(monkeypatch, tmp_path) -> None:

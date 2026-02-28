@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from eval.schemas.raw import (
+    Anchor,
     AnchorSelection,
     LoadgenResults,
     RequestRecord,
@@ -137,9 +138,9 @@ def test_raw_schemas_valid() -> None:
         scenario_id="similar_books_smoke",
         dataset_id="local_dev",
         seed=42,
-        anchors=["1", "2"],
+        anchors=[Anchor(id="1"), Anchor(id="2")],
     )
-    assert anchors.anchors_schema_version == "1.0"
+    assert anchors.anchors_schema_version == "2.0"
 
     record = RequestRecord(
         run_id="run_123",

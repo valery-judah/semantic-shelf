@@ -42,12 +42,12 @@ def _write_run_fixture(base_dir: Path, run_id: str) -> None:
     (base_dir / "run.json").write_text(json.dumps(run_payload), encoding="utf-8")
 
     anchors_payload = {
-        "anchors_schema_version": "1.0",
+        "anchors_schema_version": "2.0",
         "run_id": run_id,
         "scenario_id": "similar_books_smoke",
         "dataset_id": "local_dev",
         "seed": 42,
-        "anchors": ["1", "2"],
+        "anchors": [{"id": "1", "metadata": {}}, {"id": "2", "metadata": {}}],
     }
     (raw_dir / "anchors.json").write_text(json.dumps(anchors_payload), encoding="utf-8")
 

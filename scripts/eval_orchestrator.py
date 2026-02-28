@@ -5,13 +5,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
 
 from eval.anchors import AnchorSelectionInputs, select_anchors
 from eval.domain import DatasetId, ScenarioId
-from eval.schemas.raw import AnchorSelection
+from eval.schemas.raw import Anchor, AnchorSelection
 from eval.schemas.run import RunMetadata
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -86,16 +85,13 @@ def write_run_metadata(ctx: RunContext) -> None:
     run_json_path.write_text(run_meta.model_dump_json(indent=2), encoding="utf-8")
 
 
-def write_anchor_selection(
-    ctx: RunContext, anchors: list[str], metadata: dict[str, dict[str, Any]]
-) -> None:
+def write_anchor_selection(ctx: RunContext, anchors: list[Anchor]) -> None:
     selection = AnchorSelection(
         run_id=ctx.run_id,
         scenario_id=ctx.scenario_id,
         dataset_id=ctx.dataset_id,
         seed=ctx.seed,
         anchors=anchors,
-        anchor_metadata=metadata,
     )
     anchors_path = ctx.raw_dir / "anchors.json"
     anchors_path.write_text(selection.model_dump_json(indent=2), encoding="utf-8")
@@ -107,7 +103,7 @@ def main() -> None:
         setup_run_directories(ctx)
         write_run_metadata(ctx)
 
-        anchors, metadata = select_anchors(
+        anchors = select_anchors(
             AnchorSelectionInputs(
                 dataset_id=DatasetId(ctx.dataset_id),
                 scenario_id=ScenarioId(ctx.scenario_id),
@@ -115,7 +111,7 @@ def main() -> None:
                 count=ctx.anchor_count,
             )
         )
-        write_anchor_selection(ctx, anchors, metadata)
+        write_anchor_selection(ctx, anchors)
     except (ValidationError, ValueError) as exc:
         logger.error("Failed to build valid evaluation artifacts: %s", exc)
         sys.exit(1)

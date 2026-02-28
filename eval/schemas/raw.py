@@ -3,17 +3,24 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from eval.domain import AnchorId
+
+
+class Anchor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: AnchorId
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
 
 class AnchorSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    anchors_schema_version: str = Field(default="1.0", min_length=1)
+    anchors_schema_version: str = Field(default="2.0", min_length=1)
     run_id: str = Field(..., min_length=1)
     scenario_id: str = Field(..., min_length=1)
     dataset_id: str = Field(..., min_length=1)
     seed: int = Field(..., ge=0)
-    anchors: list[str] = Field(default_factory=list)
-    anchor_metadata: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    anchors: list[Anchor] = Field(default_factory=list)
 
 
 class RequestRecord(BaseModel):
